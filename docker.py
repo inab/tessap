@@ -811,7 +811,7 @@ Cgroup namespace to use (host|private)
                     )
                     sp.add_argument(
                         "CMDARGS",
-                        nargs="*",
+                        nargs=argparse.REMAINDER,
                         help="Command line and args",
                     )
                 else:
@@ -820,15 +820,19 @@ Cgroup namespace to use (host|private)
                         help=match[2],
                     )
 
+DEFAULT_DEBUG_HOST = "http://localhost:8000"
+
 def subcommand_run(logger: "logging.Logger", docker_cmd: "str", args: "argparse.Namespace", unknown: "Sequence[str]") -> "int":
     # This shim cannot work without command-line args
     if len(args.CMDARGS) == 0:
         return 125
 
-    logger.debug(args)
+    logger.debug(f"args {args}")
+    logger.debug(f"unk {unknown}")
 
+    host = args.host[0] if isinstance(args.host, list) and len(args.host) else DEFAULT_DEBUG_HOST
     try:
-        cli = tes.HTTPClient("http://localhost:8000", timeout=5)
+        cli = tes.HTTPClient(host, timeout=5)
     except:
         return 125
 
@@ -856,10 +860,19 @@ def subcommand_run(logger: "logging.Logger", docker_cmd: "str", args: "argparse.
 
     logger.debug(w_task)
 
-    task_info = cli.get_task(task_id, view="BASIC")
+    task_info = cli.get_task(task_id, view="FULL" if args.tty else "BASIC")
 
-    if isinstance(task_info.logs, list) and len(task_info.logs) > 0 and isinstance(task_info.logs[-1].logs, list) and len(task_info.logs[-1].logs) > 0:
-        retval = task_info.logs[-1].logs[-1].exit_code
+    if isinstance(task_info.logs, list) and len(task_info.logs) > 0:
+        task_log = task_info.logs[-1]
+        if isinstance(task_log.logs, list) and len(task_log.logs) > 0:
+            exec_log = task_log.logs[-1]
+            
+            retval = exec_log.exit_code
+            if args.tty:
+                if exec_log.stdout is not None:
+                    sys.stdout.write(exec_log.stdout)
+                if exec_log.stderr is not None:
+                    sys.stderr.write(exec_log.stderr)
     else:
         retval = 126
 
@@ -887,7 +900,7 @@ LOG_MAPPING = {
 def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str, SubcommandProc]" = SUBCOMMAND_ROUTER) -> "int":
     p = ArgumentParser(
         prog="docker",
-        description="Docker TES shim",
+        description="Docker GA4GH TES shim",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -973,7 +986,7 @@ def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str
     elif args.log_level is not None:
         log_level_str = args.log_level
 
-    log_level = LOG_MAPPING[log_level_str]
+    log_level = LOG_MAPPING.get(log_level_str, logging.INFO)
     if log_level < logging.INFO:
             log_format = LOGGING_FORMAT
     else:
