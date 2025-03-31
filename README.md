@@ -29,7 +29,7 @@ Each workflow engine depends on a subset of docker subcommands in order
 to work properly.
 
 | Implemented | Subcommand | Nextflow | cwltool |
-| ----------- | ---------- | -------- | ------- |
+|:-----------:|------------|:--------:|:-------:|
 | :black_square_button: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: |
 | :black_square_button: | `docker rm` | :ballot_box_with_check: | :black_square_button: |
 | :black_square_button: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
