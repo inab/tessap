@@ -2,12 +2,18 @@
 
 import argparse
 import json
+import logging
 import pathlib
 import re
 import subprocess
 import sys
 
 import tes
+
+LOGGING_FORMAT = "%(asctime)-15s - [%(levelname)s] %(message)s"
+DEBUG_LOGGING_FORMAT = (
+        "%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s"
+)
 
 DEFAULT_DOCKER_CMD = "/usr/bin/docker"
 
@@ -84,7 +90,7 @@ class ArgumentParser(argparse.ArgumentParser):
         self.register('action', 'parsers', _SubParsersAction)
 
 
-def run_local_docker(docker_cmd: "str", args: "argparse.Namespace", *params: "str") -> "int":
+def run_local_docker(logger: "logging.Logger", docker_cmd: "str", args: "argparse.Namespace", *params: "str") -> "int":
     retval = subprocess.call(
         [
             docker_cmd,
@@ -814,12 +820,17 @@ Cgroup namespace to use (host|private)
                         help=match[2],
                     )
 
-def subcommand_run(docker_cmd: "str", args: "argparse.Namespace", unknown: "Sequence[str]", debug: "bool" = False) -> "int":
+def subcommand_run(logger: "logging.Logger", docker_cmd: "str", args: "argparse.Namespace", unknown: "Sequence[str]") -> "int":
     # This shim cannot work without command-line args
     if len(args.CMDARGS) == 0:
         return 125
-    if debug:
-        print(args)
+
+    logger.debug(args)
+
+    try:
+        cli = tes.HTTPClient("http://localhost:8000", timeout=5)
+    except:
+        return 125
 
     # Define task
     task = tes.Task(
@@ -830,33 +841,47 @@ def subcommand_run(docker_cmd: "str", args: "argparse.Namespace", unknown: "Sequ
             )
         ]
     )
-    
-    try:
-        cli = tes.HTTPClient("http://localhost:8000", timeout=5)
-    except:
-        return 125
 
+    if args.interactive:
+        logger.debug("--interactive cannot be honoured as there is no STDIN streaming communication in GA4GH TES")
+    
     # Create and run task
-    task_id = cli.create_task(task)
+    try:
+        task_id = cli.create_task(task)
+    except:
+        return 126
+
     timeout = None
     w_task = cli.wait(task_id, timeout=timeout)
-    if debug:
-        print(w_task)
+
+    logger.debug(w_task)
+
     task_info = cli.get_task(task_id, view="BASIC")
 
     if isinstance(task_info.logs, list) and len(task_info.logs) > 0 and isinstance(task_info.logs[-1].logs, list) and len(task_info.logs[-1].logs) > 0:
         retval = task_info.logs[-1].logs[-1].exit_code
     else:
         retval = 126
-    if debug:
-        print(task_info)
+
+    logger.debug(task_info)
     # j = json.loads(task_info.as_json())
     # print(j)
+
+    if args.rm:
+        logger.debug("--rm cannot be honoured, as there is no standard way to remove the task from the list of already completed tasks in GA4GH TES")
 
     return retval
 
 SUBCOMMAND_ROUTER = {
     "run": subcommand_run,
+}
+
+LOG_MAPPING = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "warn": logging.WARNING,
+    "error": logging.ERROR,
+    "fatal": logging.FATAL,
 }
 
 def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str, SubcommandProc]" = SUBCOMMAND_ROUTER) -> "int":
@@ -942,12 +967,31 @@ def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str
     if args.version:
         return run_local_docker(docker_cmd, "-v")
     
-    if args.command is None:
-        return run_local_docker(docker_cmd, args, *unknown)
-    elif args.command not in subcommand_router:
-        return run_local_docker(docker_cmd, args, args.command, *unknown)
+    log_level_str = "info"
+    if args.debug:
+        log_level_str = "debug"
+    elif args.log_level is not None:
+        log_level_str = args.log_level
+
+    log_level = LOG_MAPPING[log_level_str]
+    if log_level < logging.INFO:
+            log_format = LOGGING_FORMAT
     else:
-        return subcommand_router[args.command](docker_cmd, args, unknown, debug=args.debug)
+            log_format = DEBUG_LOGGING_FORMAT
+
+    logging_config = {
+        "level": log_level,
+        "format": log_format,
+    }
+    logging.basicConfig(**logging_config)
+    logger = logging.getLogger("docker-tes-proxy")
+
+    if args.command is None:
+        return run_local_docker(logger, docker_cmd, args, *unknown)
+    elif args.command not in subcommand_router:
+        return run_local_docker(logger, docker_cmd, args, args.command, *unknown)
+    else:
+        return subcommand_router[args.command](logger, docker_cmd, args, unknown)
     
     return 0
 

@@ -34,6 +34,7 @@ to work properly.
 | <ul><li>[ ]</li></ul> | `docker rm` | [x] | [ ] |
 | <ul><li>[ ]</li></ul> | `docker stop` | [x] | [ ] |
 | <ul><li>[ ]</li></ul> | `docker kill` | [x] | [ ] |
+| <ul><li>[ ]</li></ul> | `docker ps` | [ ] | [ ] |
 | <ul><li>[ ]</li></ul> | `docker pull` | [ ] | [x] |
 | <ul><li>[ ]</li></ul> | `docker stats` | [ ] | [x] |
 | <ul><li>[ ]</li></ul> | `docker inspect` | [ ] | [x] |
