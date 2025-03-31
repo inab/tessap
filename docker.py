@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
+import io
 import json
 import logging
+import os
 import pathlib
 import re
 import subprocess
@@ -836,12 +838,44 @@ def subcommand_run(logger: "logging.Logger", docker_cmd: "str", args: "argparse.
     except:
         return 125
 
+    task_env: "Optional[MutableMapping[str, str]]" = None
+    if isinstance(args.env, list) or isinstance(args.env_file, list):
+        task_env = dict()
+        env_files = []
+        # Queuing files
+        if isinstance(args.env_file, list):
+            for env_file in args.env_file:
+                eF = open(env_file, mode="r", encoding="utf-8")
+                env_files.append(eF)
+        
+        if isinstance(args.env, list):
+            env_files.append(io.StringIO("\n".join(args.env)))
+
+        for eF in env_files:
+            try:
+                for env_line in eF:
+                    if env_line.startswith("#"):
+                        continue
+                    # Remove the end of the line
+                    env_line = env_line.rstrip("\n")
+                    # Now, detect the equals
+                    equal_pos = env_line.find("=")
+                    if equal_pos == 0:
+                        continue
+                    elif equal_pos == -1:
+                        task_env[env_line] = os.environ.get(env_line, "")
+                    else:
+                        task_env[env_line[0:equal_pos]] = env_line[equal_pos+1:]
+            finally:
+                eF.close()
+
     # Define task
     task = tes.Task(
         executors=[
             tes.Executor(
                 image=args.IMAGE,
                 command=args.CMDARGS,
+                env=task_env,
             )
         ]
     )
