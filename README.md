@@ -30,17 +30,17 @@ to work properly.
 
 | Implemented | Subcommand | Nextflow | cwltool |
 | ----------- | ---------- | -------- | ------- |
-| <ul><li>[ ]</li></ul> | `docker run` | [x] | [x] |
-| <ul><li>[ ]</li></ul> | `docker rm` | [x] | [ ] |
-| <ul><li>[ ]</li></ul> | `docker stop` | [x] | [ ] |
-| <ul><li>[ ]</li></ul> | `docker kill` | [x] | [ ] |
-| <ul><li>[ ]</li></ul> | `docker ps` | [ ] | [ ] |
-| <ul><li>[ ]</li></ul> | `docker pull` | [ ] | [x] |
-| <ul><li>[ ]</li></ul> | `docker stats` | [ ] | [x] |
-| <ul><li>[ ]</li></ul> | `docker inspect` | [ ] | [x] |
-| <ul><li>[ ]</li></ul> | `docker import` | [ ] | [x] |
-| <ul><li>[ ]</li></ul> | `docker load` | [ ] | [x] |
-| <ul><li>[ ]</li></ul> | `docker build` | [ ] | [x] |
+| :black_square_button: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: |
+| :black_square_button: | `docker rm` | :ballot_box_with_check: | :black_square_button: |
+| :black_square_button: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
+| :black_square_button: | `docker kill` | :ballot_box_with_check: | :black_square_button: |
+| :black_square_button: | `docker ps` | :black_square_button: | :black_square_button: |
+| :black_square_button: | `docker pull` | :black_square_button: | :ballot_box_with_check: |
+| :black_square_button: | `docker stats` | :black_square_button: | :ballot_box_with_check: |
+| :black_square_button: | `docker inspect` | :black_square_button: | :ballot_box_with_check: |
+| :black_square_button: | `docker import` | :black_square_button: | :ballot_box_with_check: |
+| :black_square_button: | `docker load` | :black_square_button: | :ballot_box_with_check: |
+| :black_square_button: | `docker build` | :black_square_button: | :ballot_box_with_check: |
 
 So, most of previous subcommands from `docker` are being implemented in order to mimic it,
 so this shim can bypass the original one in order to forward commands
