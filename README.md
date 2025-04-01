@@ -8,7 +8,7 @@ The target from [EuroScienceGateway](https://galaxyproject.org/projects/esg/) T3
 is that [WfExS-backend](https://github.com/inab/WfExS-backend) workflow
 orchestrator uses [GA4GH TES](https://ga4gh.github.io/task-execution-schemas/docs/)
 nodes for the computation of the
-workflows. This is because T3.3 from ESG has created a GA4GH TES frontend
+workflows. This is because T3.2 from ESG has created a GA4GH TES frontend
 for Galaxy Pulsar nodes.
 
 ## Rationale
