@@ -1,2 +1,3 @@
 py-tes @ git+https://github.com/jmfernandez/py-tes@funnel_in_out_fix
+pyftpdlib
 dulwich
