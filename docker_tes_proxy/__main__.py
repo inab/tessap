@@ -17,7 +17,6 @@
 # limitations under the License.
 
 import argparse
-import io
 import json
 import logging
 import os
@@ -26,13 +25,40 @@ import re
 import subprocess
 import sys
 
-import tes
+from typing import (
+    cast,
+    TYPE_CHECKING,
+)
 
-from .argparse_helper import ArgumentParser
+if TYPE_CHECKING:
+    from typing import (
+        Mapping,
+        MutableSequence,
+        Sequence,
+        Union,
+    )
+
+    from typing_extensions import (
+        NotRequired,
+        TypedDict,
+    )
+
+    from .subcommands import (
+        SubcommandProc,
+    )
+
+    class BasicLoggingConfigDict(TypedDict):
+        filename: NotRequired[str]
+        format: str
+        level: int
+
+
+from .argparse_helper import _SubParsersGroupAction
+from .subcommands import SUBCOMMAND_ROUTER
 
 LOGGING_FORMAT = "%(asctime)-15s - [%(levelname)s] %(message)s"
 DEBUG_LOGGING_FORMAT = (
-        "%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s"
+    "%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s"
 )
 
 DEFAULT_DOCKER_CMD = "/usr/bin/docker"
@@ -51,7 +77,12 @@ DEFAULT_DOCKER_CMD = "/usr/bin/docker"
 #  info        Display system-wide information
 
 
-def run_local_docker(logger: "logging.Logger", docker_cmd: "str", args: "argparse.Namespace", *params: "str") -> "int":
+def run_local_docker(
+    logger: "logging.Logger",
+    docker_cmd: "str",
+    args: "argparse.Namespace",
+    *params: "str"
+) -> "int":
     retval = subprocess.call(
         [
             docker_cmd,
@@ -65,6 +96,7 @@ def run_local_docker(logger: "logging.Logger", docker_cmd: "str", args: "argpars
 
     return retval
 
+
 def local_docker_help(docker_cmd: "str") -> "str":
     proc = subprocess.Popen(
         [
@@ -77,27 +109,31 @@ def local_docker_help(docker_cmd: "str") -> "str":
     )
     try:
         outs, errs = proc.communicate(timeout=15)
-    except TimeoutExpired:
+    except subprocess.TimeoutExpired:
         proc.kill()
         outs, errs = proc.communicate()
 
     return errs
 
+
 SUBCOMMAND_RE = re.compile(r"^  ([a-z]+)\*?\s+(.*)")
+
 
 def inject_subparsers(p: "argparse.ArgumentParser", docker_cmd: "str") -> "None":
     # Let's learn the sub-commands
     help_block = local_docker_help(docker_cmd=docker_cmd)
     # print(help_block)
 
-    current_sp = p.add_subparsers(dest="command", metavar="COMMAND")
+    current_sp = cast(
+        "_SubParsersGroupAction", p.add_subparsers(dest="command", metavar="COMMAND")
+    )
     current_sp_grp = None
     for line in help_block.split("\n"):
         if line.endswith("Options:"):
             current_sp_grp = None
         elif line.endswith("Commands:"):
             current_sp_grp = current_sp.add_parser_group(line)
-        elif current_sp is not None:
+        elif current_sp_grp is not None:
             match = SUBCOMMAND_RE.match(line)
             if match is not None:
                 if match[1] == "run":
@@ -597,16 +633,14 @@ Cgroup namespace to use (host|private)
                     )
 
                     sp.add_argument(
-                        "-p"
-                        "--publish",
+                        "-p" "--publish",
                         metavar="list",
                         action="append",
                         help="Publish a container's port(s) to the host",
                     )
 
                     sp.add_argument(
-                        "-P"
-                        "--publish-all",
+                        "-P" "--publish-all",
                         action="store_true",
                         help="Publish all exposed ports to random ports",
                     )
@@ -616,7 +650,7 @@ Cgroup namespace to use (host|private)
                         metavar="string",
                         choices=["always", "missing", "never"],
                         default="missing",
-                        help="Pull image before running (\"always\", \"missing\", \"never\")",
+                        help='Pull image before running ("always", "missing", "never")',
                     )
 
                     sp.add_argument(
@@ -781,106 +815,6 @@ Cgroup namespace to use (host|private)
                         help=match[2],
                     )
 
-DEFAULT_DEBUG_HOST = "http://localhost:8000"
-
-def subcommand_run(logger: "logging.Logger", docker_cmd: "str", args: "argparse.Namespace", unknown: "Sequence[str]") -> "int":
-    # This shim cannot work without command-line args
-    if len(args.CMDARGS) == 0:
-        return 125
-
-    logger.debug(f"args {args}")
-    logger.debug(f"unk {unknown}")
-
-    host = args.host[0] if isinstance(args.host, list) and len(args.host) else DEFAULT_DEBUG_HOST
-    try:
-        cli = tes.HTTPClient(host, timeout=5)
-    except:
-        return 125
-
-    task_env: "Optional[MutableMapping[str, str]]" = None
-    if isinstance(args.env, list) or isinstance(args.env_file, list):
-        task_env = dict()
-        env_files = []
-        # Queuing files
-        if isinstance(args.env_file, list):
-            for env_file in args.env_file:
-                eF = open(env_file, mode="r", encoding="utf-8")
-                env_files.append(eF)
-        
-        if isinstance(args.env, list):
-            env_files.append(io.StringIO("\n".join(args.env)))
-
-        for eF in env_files:
-            try:
-                for env_line in eF:
-                    if env_line.startswith("#"):
-                        continue
-                    # Remove the end of the line
-                    env_line = env_line.rstrip("\n")
-                    # Now, detect the equals
-                    equal_pos = env_line.find("=")
-                    if equal_pos == 0:
-                        continue
-                    elif equal_pos == -1:
-                        task_env[env_line] = os.environ.get(env_line, "")
-                    else:
-                        task_env[env_line[0:equal_pos]] = env_line[equal_pos+1:]
-            finally:
-                eF.close()
-
-    # Define task
-    task = tes.Task(
-        executors=[
-            tes.Executor(
-                image=args.IMAGE,
-                command=args.CMDARGS,
-                env=task_env,
-            )
-        ]
-    )
-
-    if args.interactive:
-        logger.debug("--interactive cannot be honoured as there is no STDIN streaming communication in GA4GH TES")
-    
-    # Create and run task
-    try:
-        task_id = cli.create_task(task)
-    except:
-        return 126
-
-    timeout = None
-    w_task = cli.wait(task_id, timeout=timeout)
-
-    logger.debug(w_task)
-
-    task_info = cli.get_task(task_id, view="FULL" if args.tty else "BASIC")
-
-    if isinstance(task_info.logs, list) and len(task_info.logs) > 0:
-        task_log = task_info.logs[-1]
-        if isinstance(task_log.logs, list) and len(task_log.logs) > 0:
-            exec_log = task_log.logs[-1]
-            
-            retval = exec_log.exit_code
-            if args.tty:
-                if exec_log.stdout is not None:
-                    sys.stdout.write(exec_log.stdout)
-                if exec_log.stderr is not None:
-                    sys.stderr.write(exec_log.stderr)
-    else:
-        retval = 126
-
-    logger.debug(task_info)
-    # j = json.loads(task_info.as_json())
-    # print(j)
-
-    if args.rm:
-        logger.debug("--rm cannot be honoured, as there is no standard way to remove the task from the list of already completed tasks in GA4GH TES")
-
-    return retval
-
-SUBCOMMAND_ROUTER = {
-    "run": subcommand_run,
-}
 
 LOG_MAPPING = {
     "debug": logging.DEBUG,
@@ -890,12 +824,17 @@ LOG_MAPPING = {
     "fatal": logging.FATAL,
 }
 
-def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str, SubcommandProc]" = SUBCOMMAND_ROUTER) -> "int":
-    p = ArgumentParser(
+
+def main(
+    docker_cmd: "str" = DEFAULT_DOCKER_CMD,
+    subcommand_router: "Mapping[str, SubcommandProc]" = SUBCOMMAND_ROUTER,
+) -> "int":
+    p = argparse.ArgumentParser(
         prog="docker",
         description="Docker GA4GH TES shim",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
+    p.register("action", "parsers", _SubParsersGroupAction)
 
     p.add_argument(
         "--config",
@@ -907,7 +846,7 @@ def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str
         "-c",
         "--context",
         metavar="string",
-        help="Name of the context to use to connect to the daemon (overrides DOCKER_HOST env var and default context set with \"docker context use\")",
+        help='Name of the context to use to connect to the daemon (overrides DOCKER_HOST env var and default context set with "docker context use")',
     )
     p.add_argument(
         "-D",
@@ -969,10 +908,7 @@ def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str
     inject_subparsers(p, docker_cmd=docker_cmd)
 
     args, unknown = p.parse_known_args()
-    
-    if args.version:
-        return run_local_docker(docker_cmd, "-v")
-    
+
     log_level_str = "info"
     if args.debug:
         log_level_str = "debug"
@@ -981,16 +917,19 @@ def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str
 
     log_level = LOG_MAPPING.get(log_level_str, logging.INFO)
     if log_level < logging.INFO:
-            log_format = LOGGING_FORMAT
+        log_format = LOGGING_FORMAT
     else:
-            log_format = DEBUG_LOGGING_FORMAT
+        log_format = DEBUG_LOGGING_FORMAT
 
-    logging_config = {
+    logging_config: "BasicLoggingConfigDict" = {
         "level": log_level,
         "format": log_format,
     }
     logging.basicConfig(**logging_config)
     logger = logging.getLogger("docker-tes-proxy")
+
+    if args.version:
+        return run_local_docker(logger, docker_cmd, args, "-v")
 
     if args.command is None:
         return run_local_docker(logger, docker_cmd, args, *unknown)
@@ -998,11 +937,13 @@ def main(docker_cmd: "str" = DEFAULT_DOCKER_CMD, subcommand_router: "Mapping[str
         return run_local_docker(logger, docker_cmd, args, args.command, *unknown)
     else:
         return subcommand_router[args.command](logger, docker_cmd, args, unknown)
-    
+
     return 0
 
-def main_and_exit():
+
+def main_and_exit() -> "None":
     sys.exit(main())
+
 
 if __name__ == "__main__":
     main_and_exit()

@@ -1,0 +1,6 @@
+typing_extensions
+mypy-extensions
+types-mypy-extensions
+types-setuptools
+types-requests
+types-pyOpenSSL

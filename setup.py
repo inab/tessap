@@ -46,11 +46,11 @@ with open(
         m = egg.search(line)
         requirements.append(line if m is None else m.group(1))
 
-#package_data = {
-#    "docker_tes_proxy": [
-#        "py.typed",
-#    ],
-#}
+package_data = {
+    "docker_tes_proxy": [
+        "py.typed",
+    ],
+}
 
 setuptools.setup(
     name="docker-tes-proxy",

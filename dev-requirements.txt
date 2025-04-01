@@ -1,0 +1,25 @@
+setuptools
+wheel
+pylint < 2.14.0 ; python_version == '3.6'
+pylint >= 2.15.5 ; python_version >= '3.7'
+# pytest
+# pytest-cov
+# pytest-dependency @ git+https://github.com/jmfernandez/pytest-dependency@0.6.3
+# pytest-env
+# pytest-order
+# pytest_param_files
+# pytest-xdist
+pyflakes >= 2.5.0
+flake8 < 6.0.0 ; python_version < '3.8'
+flake8 >= 6.0.0 ; python_version >= '3.8'
+mccabe >= 0.7.0
+mypy >= 1.1.1
+# This one is now managed by the ReadTheDocs documentation
+# json-schema-for-humans >= 0.45.1
+pre-commit >= 2.17.0
+# This is the last version of black supporting Python 3.7
+black == 23.3.0
+# pip-audit, depending on the minimal versions
+pip-audit < 2.6.2 ; python_version == '3.7'
+pip-audit >= 2.6.2 ; python_version >= '3.8'
+-r mypy-requirements.txt
