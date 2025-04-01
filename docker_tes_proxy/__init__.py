@@ -16,8 +16,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys
-from docker_tes_proxy.__main__ import main_and_exit
+__author__ = "José M. Fernández <https://orcid.org/0000-0002-4806-5140>"
+__copyright__ = "© 2025 Barcelona Supercomputing Center (BSC), ES"
+__license__ = "Apache 2.0"
 
-if __name__ == "__main__":
-    main_and_exit()
+# https://www.python.org/dev/peps/pep-0396/
+__version__ = "0.0.1"
+__url__ = "https://github.com/inab/docker-tes-proxy"
+__official_name__ = "docker-tes-proxy"
