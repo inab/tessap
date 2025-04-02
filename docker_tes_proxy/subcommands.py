@@ -129,18 +129,45 @@ def subcommand_run(
             "--interactive cannot be honoured as there is no STDIN streaming communication in GA4GH TES"
         )
 
+    # Register the task id
+    if args.cidfile:
+        try:
+            cF = open(args.cidfile, mode="w", encoding="utf-8")
+        except Exception as e:
+            logger.error(
+                f"docker: failed to create the container ID file: open {args.cidfile}: {e}."
+            )
+            return 126
+    else:
+        cF = None
+
     # Create and run task
     try:
-        task_resp = cli.create_task(task)
+        task_resp_id = cli.create_task(task)
     except:
         return 126
 
+    retval = 0
+    if cF is not None:
+        try:
+            cF.write(task_resp_id)
+        except Exception as e:
+            logger.error(
+                f"docker: failed to write the container ID file {args.cidfile}: {e}."
+            )
+            retval = 126
+        finally:
+            cF.close()
+
+    if args.detach:
+        return retval
+
     timeout = None
-    w_task = cli.wait(task_resp.id, timeout=timeout)
+    w_task = cli.wait(task_resp_id, timeout=timeout)
 
     logger.debug(w_task)
 
-    task_info = cli.get_task(task_resp.id, view="FULL" if args.tty else "BASIC")
+    task_info = cli.get_task(task_resp_id, view="FULL" if args.tty else "BASIC")
 
     retval = 126
     if isinstance(task_info.logs, list) and len(task_info.logs) > 0:
