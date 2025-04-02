@@ -75,7 +75,8 @@ jobs:
         with:
           requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
-          exclude: 'pylint.*'
+          # docutils has several licences, one of them is GPL
+          exclude: '(?i)^(pylint|docutils).*'
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_report.outputs.report }}"
