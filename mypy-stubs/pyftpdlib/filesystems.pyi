@@ -31,6 +31,7 @@ class AbstractedFS:
     class FileWrapper:
         file: IO[bytes]
         name: str
+
     def mkstemp(
         self,
         suffix: str = "",
