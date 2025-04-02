@@ -22,8 +22,10 @@ import logging
 import os
 import pathlib
 import shutil
+import signal
 import sys
 import tempfile
+import time
 import urllib.parse
 import uuid
 
@@ -66,6 +68,10 @@ def pid_exists(pid: "int") -> "bool":
         return True
 
 
+class DaemonRunningException(Exception):
+    pass
+
+
 class FTPServerForTES:
     USER_RO = "user_ro"
     USER_RW = "user_rw"
@@ -74,6 +80,7 @@ class FTPServerForTES:
     def __init__(
         self,
         public_name: "str" = "localhost",
+        public_port: "Optional[int]" = None,
         listen_ip: "str" = "::",
         listen_port: "int" = 2121,
     ):
@@ -85,13 +92,14 @@ class FTPServerForTES:
 
         self.authorizer = DummyAuthorizer()
 
-        self.handler = FTPHandler
-        self.handler.authorizer = self.authorizer
-        self.handler.abstracted_fs = PermissiveFS
+        self.handler_clazz = FTPHandler
+        self.handler_clazz.authorizer = self.authorizer
+        self.handler_clazz.abstracted_fs = PermissiveFS
 
-        self.public_name = public_name
         self.listen_ip = listen_ip
         self.listen_port = listen_port
+        self.public_name = public_name
+        self.public_port = listen_port if public_port is None else public_port
 
         # Directories holding the read-only
         # and read-write volumes
@@ -120,6 +128,11 @@ class FTPServerForTES:
         self.daemon_pid: "Optional[int]" = None
 
     def add_ro_volume(self, local_path: "Union[str, os.PathLike[str]]") -> "str":
+        if self.daemon_pid is not None:
+            self.logger.warning(
+                f"FTP daemon is already running at {self.daemon_pid}. Changes could not be visible"
+            )
+
         rand_name = str(uuid.uuid4())
         ftp_path = os.path.join(self.ro_dir, rand_name)
         os.symlink(local_path, ftp_path)
@@ -131,7 +144,9 @@ class FTPServerForTES:
                 + ":"
                 + urllib.parse.quote(self.user_ro_pass)
                 + "@"
-                + self.public_name,
+                + self.public_name
+                + ":"
+                + str(self.public_port),
                 "/" + rand_name,
                 "",
                 "",
@@ -140,6 +155,11 @@ class FTPServerForTES:
         )
 
     def add_rw_volume(self, local_path: "Union[str, os.PathLike[str]]") -> "str":
+        if self.daemon_pid is not None:
+            self.logger.warning(
+                f"FTP daemon is already running at {self.daemon_pid}. Changes could not be visible"
+            )
+
         rand_name = str(uuid.uuid4())
         ftp_path = os.path.join(self.rw_dir, rand_name)
         os.symlink(local_path, ftp_path)
@@ -151,7 +171,9 @@ class FTPServerForTES:
                 + ":"
                 + urllib.parse.quote(self.user_rw_pass)
                 + "@"
-                + self.public_name,
+                + self.public_name
+                + ":"
+                + str(self.public_port),
                 "/" + rand_name,
                 "",
                 "",
@@ -160,6 +182,11 @@ class FTPServerForTES:
         )
 
     def add_wo_volume(self, local_path: "Union[str, os.PathLike[str]]") -> "str":
+        if self.daemon_pid is not None:
+            self.logger.warning(
+                f"FTP daemon is already running at {self.daemon_pid}. Changes could not be visible"
+            )
+
         rand_name = str(uuid.uuid4())
         ftp_path = os.path.join(self.rw_dir, rand_name)
         self.wo_mapping[rand_name] = pathlib.Path(local_path)
@@ -171,7 +198,9 @@ class FTPServerForTES:
                 + ":"
                 + urllib.parse.quote(self.user_wo_pass)
                 + "@"
-                + self.public_name,
+                + self.public_name
+                + ":"
+                + str(self.public_port),
                 "/" + rand_name,
                 "",
                 "",
@@ -179,11 +208,11 @@ class FTPServerForTES:
             )
         )
 
-    def daemonize(self) -> "bool":
+    def daemonize(self, log_file: "str" = "/dev/null") -> "bool":
         """Based on https://github.com/giampaolo/pyftpdlib/blob/29ad496d9a4f2bc3944fe2adbe0064a8fe702df4/demo/unix_daemon.py"""
         """A wrapper around python-daemonize context manager."""
 
-        def _daemonize(log_file: "str" = "/dev/null") -> int:
+        def _daemonize(log_file: "str") -> int:
             pid = os.fork()
             if pid > 0:
                 # exit first parent
@@ -205,12 +234,13 @@ class FTPServerForTES:
             # redirect standard file descriptors
             sys.stdout.flush()
             sys.stderr.flush()
-            si = open(log_file)
-            so = open(log_file, "a+")
-            se = open(log_file, "a+", 0)
-            os.dup2(si.fileno(), sys.stdin.fileno())
-            os.dup2(so.fileno(), sys.stdout.fileno())
-            os.dup2(se.fileno(), sys.stderr.fileno())
+            so_fileno = os.open(log_file, os.O_CREAT | os.O_WRONLY | os.O_APPEND)
+            se_fileno = os.open(log_file, os.O_WRONLY | os.O_APPEND)
+            si_fileno = os.open(log_file, os.O_RDONLY)
+
+            os.dup2(si_fileno, sys.stdin.fileno())
+            os.dup2(so_fileno, sys.stdout.fileno())
+            os.dup2(se_fileno, sys.stderr.fileno())
 
             return 0
 
@@ -219,8 +249,42 @@ class FTPServerForTES:
             return False
         # instance FTPd before daemonizing, so that in case of problems we
         # get an exception here and exit immediately
-        server = FTPServer((self.listen_ip, self.listen_port), self.handler)  # type: ignore[abstract]
-        self.daemon_pid = _daemonize()
+        server = FTPServer((self.listen_ip, self.listen_port), self.handler_clazz)  # type: ignore[abstract]
+        self.daemon_pid = _daemonize(log_file)
         if self.daemon_pid == 0:
             server.serve_forever()
+            self.logger.debug("Shutdown...")
+            sys.exit(0)
+
+        atexit.register(self.kill_daemon)
+
         return True
+
+    def kill_daemon(self) -> "bool":
+        retval = False
+        if self.daemon_pid is not None:
+            try:
+                # Is it alive?
+                os.kill(self.daemon_pid, 0)
+                os.kill(self.daemon_pid, signal.SIGTERM)
+            except ProcessLookupError:
+                self.daemon_pid = None
+
+            if self.daemon_pid is not None:
+                try:
+                    time.sleep(0.5)
+                    # Is it still alive?
+                    os.kill(self.daemon_pid, 0)
+                    # Kill it with fire
+                    self.logger.debug(
+                        f"FTP process {self.daemon_pid} being forceful killed"
+                    )
+                    os.kill(self.daemon_pid, signal.SIGKILL)
+                    time.sleep(0.5)
+                    os.kill(self.daemon_pid, 0)
+                except ProcessLookupError:
+                    retval = True
+                finally:
+                    self.daemon_pid = None
+
+        return retval
