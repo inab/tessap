@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import atexit
+import copy
 import inspect
 import logging
 import os
@@ -29,12 +30,20 @@ import time
 import urllib.parse
 import uuid
 
+# import pyftpdlib.ioloop
+# pyftpdlib.ioloop.IOLoop = pyftpdlib.ioloop.Poll
+
+import pyftpdlib.handlers
+
 from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.filesystems import AbstractedFS
 from pyftpdlib.handlers import FTPHandler
 from pyftpdlib.servers import FTPServer
 
-from typing import TYPE_CHECKING
+from typing import (
+    cast,
+    TYPE_CHECKING,
+)
 
 if TYPE_CHECKING:
     from typing import (
@@ -42,6 +51,48 @@ if TYPE_CHECKING:
         Optional,
         Union,
     )
+    from pyftpdlib.handlers import (
+        ProtoCmd,
+    )
+
+
+# BEWARE!!!! This is needed because FTP client implementation
+# used by funnel (and funnel itself) forgets the kind of input file
+# and tries listing a file as a directory
+funnel_proto_cmds = cast(
+    "MutableMapping[str, ProtoCmd]", copy.copy(pyftpdlib.handlers.proto_cmds)
+)
+del funnel_proto_cmds["MLSD"]
+del funnel_proto_cmds["MLST"]
+
+
+class FixedFTPHandler(FTPHandler):
+    proto_cmds = funnel_proto_cmds
+
+
+#    def ftp_OPTS(self, line):
+#        """Specify options for FTP commands as specified in RFC-2389."""
+#        try:
+#            if line.count(' ') > 1:
+#                raise ValueError('Invalid number of arguments')
+#            if ' ' in line:
+#                cmd, arg = line.split(' ')
+#                #if ';' not in arg:
+#                #    raise ValueError('Invalid argument')
+#            else:
+#                cmd, arg = line, ''
+#            # actually the only command able to accept options is MLST
+#            if cmd.upper() != 'MLST' or 'MLST' not in self.proto_cmds:
+#                raise ValueError(f'Unsupported command "{cmd}"')
+#        except ValueError as err:
+#            self.respond(f'501 {err}.')
+#        else:
+#            facts = [x.lower() for x in arg.split(';')]
+#            self._current_facts = [
+#                x for x in facts if x in self._available_facts
+#            ]
+#            f = ''.join([x + ';' for x in self._current_facts])
+#            self.respond('200 MLST OPTS ' + f)
 
 
 class PermissiveFS(AbstractedFS):
@@ -53,6 +104,15 @@ class PermissiveFS(AbstractedFS):
 
     def get_group_by_gid(self, gid: "Union[int, str]") -> "str":
         return "group"
+
+    # We are hiding here the symbolic links
+    def lstat(self, path: "str") -> "os.stat_result":
+        return self.stat(path)
+
+    # We are hiding here the symbolic links
+    def islink(self, path: "str") -> "bool":
+        """Return True if path is a symbolic link."""
+        return False
 
 
 def pid_exists(pid: "int") -> "bool":
@@ -92,7 +152,7 @@ class FTPServerForTES:
 
         self.authorizer = DummyAuthorizer()
 
-        self.handler_clazz = FTPHandler
+        self.handler_clazz = FixedFTPHandler
         self.handler_clazz.authorizer = self.authorizer
         self.handler_clazz.abstracted_fs = PermissiveFS
 
@@ -105,10 +165,16 @@ class FTPServerForTES:
         # and read-write volumes
         self.ro_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpexport")
         atexit.register(shutil.rmtree, self.ro_dir, True)
+        self.ro_input_dir = pathlib.Path(self.ro_dir) / "input"
+        self.ro_input_dir.mkdir()
         self.rw_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpei")
         atexit.register(shutil.rmtree, self.rw_dir, True)
+        self.rw_io_dir = pathlib.Path(self.rw_dir) / "io"
+        self.rw_io_dir.mkdir()
         self.wo_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpimport")
         atexit.register(shutil.rmtree, self.wo_dir, True)
+        self.wo_output_dir = pathlib.Path(self.wo_dir) / "output"
+        self.wo_output_dir.mkdir()
 
         self.user_ro_pass = str(uuid.uuid4())
         self.user_rw_pass = str(uuid.uuid4())
@@ -134,8 +200,10 @@ class FTPServerForTES:
             )
 
         rand_name = str(uuid.uuid4())
-        ftp_path = os.path.join(self.ro_dir, rand_name)
-        os.symlink(local_path, ftp_path)
+        if os.path.isfile(local_path):
+            rand_name += ".file"
+        ftp_path = os.path.join(self.ro_input_dir, rand_name)
+        os.symlink(os.path.realpath(local_path), ftp_path)
 
         return urllib.parse.urlunparse(
             (
@@ -147,7 +215,7 @@ class FTPServerForTES:
                 + self.public_name
                 + ":"
                 + str(self.public_port),
-                "/" + rand_name,
+                "/" + os.path.relpath(ftp_path, self.ro_dir),
                 "",
                 "",
                 "",
@@ -161,8 +229,8 @@ class FTPServerForTES:
             )
 
         rand_name = str(uuid.uuid4())
-        ftp_path = os.path.join(self.rw_dir, rand_name)
-        os.symlink(local_path, ftp_path)
+        ftp_path = os.path.join(self.rw_io_dir, rand_name)
+        os.symlink(os.path.realpath(local_path), ftp_path)
 
         return urllib.parse.urlunparse(
             (
@@ -174,7 +242,7 @@ class FTPServerForTES:
                 + self.public_name
                 + ":"
                 + str(self.public_port),
-                "/" + rand_name,
+                "/" + os.path.relpath(ftp_path, self.rw_dir),
                 "",
                 "",
                 "",
@@ -188,8 +256,8 @@ class FTPServerForTES:
             )
 
         rand_name = str(uuid.uuid4())
-        ftp_path = os.path.join(self.rw_dir, rand_name)
-        self.wo_mapping[rand_name] = pathlib.Path(local_path)
+        ftp_path = os.path.join(self.wo_output_dir, rand_name)
+        self.wo_mapping[rand_name] = pathlib.Path(local_path).resolve()
 
         return urllib.parse.urlunparse(
             (
@@ -201,12 +269,32 @@ class FTPServerForTES:
                 + self.public_name
                 + ":"
                 + str(self.public_port),
-                "/" + rand_name,
+                "/" + os.path.relpath(ftp_path, self.wo_dir),
                 "",
                 "",
                 "",
             )
         )
+
+    def synchronize(self) -> "None":
+        # Bring back contents
+        if self.daemon_pid is None:
+            self.logger.warning(
+                f"FTP daemon is not running. Changes could have been removed"
+            )
+
+        for rand_name, local_path in self.wo_mapping.items():
+            ftp_path = self.wo_output_dir / rand_name
+
+            if ftp_path.exists():
+                shutil.move(ftp_path, local_path)
+            else:
+                self.logger.error(
+                    f"File {ftp_path} could not be moved to {local_path}, as it does not exist"
+                )
+
+        # Last, clear it!
+        self.wo_mapping = dict()
 
     def daemonize(self, log_file: "str" = "/dev/null") -> "bool":
         """Based on https://github.com/giampaolo/pyftpdlib/blob/29ad496d9a4f2bc3944fe2adbe0064a8fe702df4/demo/unix_daemon.py"""
