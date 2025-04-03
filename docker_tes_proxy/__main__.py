@@ -917,9 +917,9 @@ def main(
 
     log_level = LOG_MAPPING.get(log_level_str, logging.INFO)
     if log_level < logging.INFO:
-        log_format = LOGGING_FORMAT
-    else:
         log_format = DEBUG_LOGGING_FORMAT
+    else:
+        log_format = LOGGING_FORMAT
 
     logging_config: "BasicLoggingConfigDict" = {
         "level": log_level,
