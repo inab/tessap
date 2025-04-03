@@ -30,7 +30,7 @@ to work properly.
 
 | Implemented | Subcommand | Nextflow | cwltool |
 |:-----------:|------------|:--------:|:-------:|
-| :black_square_button: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: |
+| :ballot_box_with_check: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: |
 | :black_square_button: | `docker rm` | :ballot_box_with_check: | :black_square_button: |
 | :black_square_button: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
 | :black_square_button: | `docker kill` | :ballot_box_with_check: | :black_square_button: |
@@ -84,4 +84,16 @@ For other commands, the line is passed to the locally installed docker binary.
    
    ```bash
    python docker.py run --rm -ti ubuntu:22.04 ls /tmp
+   ```
+
+   ```bash
+   python docker.py run -e VARIABLE=value --rm -ti ubuntu:22.04 env
+   ```
+
+   ```bash
+   python docker.py run -v ./README.md:/SOME.md:ro --rm -ti ubuntu:22.04 md5sum /SOME.md
+   ```
+
+   ```bash
+   python docker.py run -v ./README.md:/SOME.md:ro -v ./transferred.md:/tmp/OTHER.md --rm -ti ubuntu:22.04 cp /SOME.md /tmp/OTHER.md
    ```
