@@ -199,9 +199,13 @@ class FTPServerForTES:
                 f"FTP daemon is already running at {self.daemon_pid}. Changes could not be visible"
             )
 
-        rand_name = str(uuid.uuid4())
         if os.path.isfile(local_path):
-            rand_name += ".file"
+            prefix = "file_"
+            postfix = ""
+        else:
+            prefix = "dir_"
+            postfix = "/"
+        rand_name = prefix + str(uuid.uuid4())
         ftp_path = os.path.join(self.ro_input_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
 
@@ -215,7 +219,7 @@ class FTPServerForTES:
                 + self.public_name
                 + ":"
                 + str(self.public_port),
-                "/" + os.path.relpath(ftp_path, self.ro_dir),
+                "/" + os.path.relpath(ftp_path, self.ro_dir) + postfix,
                 "",
                 "",
                 "",
@@ -228,7 +232,13 @@ class FTPServerForTES:
                 f"FTP daemon is already running at {self.daemon_pid}. Changes could not be visible"
             )
 
-        rand_name = str(uuid.uuid4())
+        if os.path.isfile(local_path):
+            prefix = "file_"
+            postfix = ""
+        else:
+            prefix = "dir_"
+            postfix = "/"
+        rand_name = prefix + str(uuid.uuid4())
         ftp_path = os.path.join(self.rw_io_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
 
@@ -242,7 +252,7 @@ class FTPServerForTES:
                 + self.public_name
                 + ":"
                 + str(self.public_port),
-                "/" + os.path.relpath(ftp_path, self.rw_dir),
+                "/" + os.path.relpath(ftp_path, self.rw_dir) + postfix,
                 "",
                 "",
                 "",
