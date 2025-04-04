@@ -898,7 +898,7 @@ default-cgroupns-mode option on the daemon (default)""",
                 for mount_part in mount_parts:
                     keyval = mount_part.split("=", 1)
                     mount_attrs[keyval[0]] = keyval[-1]
-                self.logger.debug(mount_attrs)
+
                 if mount_attrs.get("type") == "bind":
                     local_path = mount_attrs.get("src", mount_attrs.get("source"))
                     remote_path = mount_attrs.get(
@@ -915,6 +915,13 @@ default-cgroupns-mode option on the daemon (default)""",
                     self.logger.debug(
                         f"--mount={mount_decl} cannot be honoured, as only type=bind can be emulated in GA4GH TES"
                     )
+
+        tags = dict()
+        # Emulation of --annotation, which is mapped to tags
+        if isinstance(args.annotation, list):
+            for annotation_decl in args.annotation:
+                parts = annotation_decl.split("=", 1)
+                tags[parts[0]] = parts[-1]
 
         # Now, process all the volume tuples
         for local_path, remote_path, flags in volumes_tuples:
@@ -979,6 +986,8 @@ default-cgroupns-mode option on the daemon (default)""",
             ],
             inputs=inputs,
             outputs=outputs,
+            tags=tags if len(tags) > 0 else None,
+            name=args.name,
         )
 
         if args.interactive:
