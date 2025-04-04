@@ -859,21 +859,25 @@ default-cgroupns-mode option on the daemon (default)""",
                 with tstdin as tFH:
                     shutil.copyfileobj(sys.stdin.buffer, tFH)
 
+        file_server = FTPServerForTES()
+
         stdin_input: "Optional[tes.Input]" = None
-        if isinstance(args.volume, list) or tstdin is not None:
-            file_server = FTPServerForTES()
+        # Add the stdin
+        if tstdin:
+            the_uri = file_server.add_ro_volume(tstdin.name)
+            remote_path = "/" + os.path.basename(tstdin.name)
+            stdin_input = tes.Input(
+                url=the_uri,
+                path=remote_path,
+                type="FILE",
+            )
+            inputs.append(stdin_input)
 
-            # Add the stdin
-            if tstdin:
-                the_uri = file_server.add_ro_volume(tstdin.name)
-                remote_path = "/" + os.path.basename(tstdin.name)
-                stdin_input = tes.Input(
-                    url=the_uri,
-                    path=remote_path,
-                    type="FILE",
-                )
-                inputs.append(stdin_input)
+        # The digested volume tuples are stored here
+        volumes_tuples = []
 
+        # --volume
+        if isinstance(args.volume, list):
             for volume_decl in args.volume:
                 volume_parts = volume_decl.split(":")
                 flags = ""
@@ -884,51 +888,83 @@ default-cgroupns-mode option on the daemon (default)""",
                     local_path, remote_path = volume_parts[0:2]
                     if len(volume_parts) > 2:
                         flags = volume_parts[2]
+                volumes_tuples.append((local_path, remote_path, flags))
 
-                local_path_exists = os.path.exists(local_path)
-                is_ro = flags.startswith("ro")
-
-                if local_path_exists:
-                    if is_ro:
-                        the_uri = file_server.add_ro_volume(local_path)
-                    else:
-                        the_uri = file_server.add_rw_volume(local_path)
-                elif is_ro:
-                    # This is not an error in docker, as it blindly creates
-                    # an empty directory for it.
-                    self.logger.error(
-                        f"docker: failed to map inexistent {local_path} as a read only volume"
+        # subset of --mount
+        if isinstance(args.mount, list):
+            for mount_decl in args.mount:
+                mount_attrs = {}
+                mount_parts = mount_decl.split(",")
+                for mount_part in mount_parts:
+                    keyval = mount_part.split("=", 1)
+                    mount_attrs[keyval[0]] = keyval[-1]
+                self.logger.debug(mount_attrs)
+                if mount_attrs.get("type") == "bind":
+                    local_path = mount_attrs.get("src", mount_attrs.get("source"))
+                    remote_path = mount_attrs.get(
+                        "dst", mount_attrs.get("destination", mount_attrs.get("target"))
                     )
-                    return 126
+                    flags = (
+                        "ro"
+                        if ("ro" in mount_attrs) or ("readonly" in mount_attrs)
+                        else ""
+                    )
+                    if local_path is not None and remote_path is not None:
+                        volumes_tuples.append((local_path, remote_path, flags))
                 else:
-                    the_uri = file_server.add_wo_volume(local_path)
+                    self.logger.debug(
+                        f"--mount={mount_decl} cannot be honoured, as only type=bind can be emulated in GA4GH TES"
+                    )
 
+        # Now, process all the volume tuples
+        for local_path, remote_path, flags in volumes_tuples:
+            local_path_exists = os.path.exists(local_path)
+            is_ro = flags.startswith("ro")
+
+            if local_path_exists:
                 if is_ro:
-                    inputs.append(
-                        tes.Input(
-                            url=the_uri,
-                            path=remote_path,
-                            type="FILE" if os.path.isfile(local_path) else "DIRECTORY",
-                        )
-                    )
+                    the_uri = file_server.add_ro_volume(local_path)
                 else:
-                    outputs.append(
-                        tes.Output(
-                            url=the_uri,
-                            path=remote_path,
-                            type=(
-                                "FILE"
-                                if not local_path_exists or os.path.isfile(local_path)
-                                else "DIRECTORY"
-                            ),
-                        )
-                    )
+                    the_uri = file_server.add_rw_volume(local_path)
+            elif is_ro:
+                # This is not an error in docker, as it blindly creates
+                # an empty directory for it.
+                self.logger.error(
+                    f"docker: failed to map inexistent {local_path} as a read only volume"
+                )
+                return 126
+            else:
+                the_uri = file_server.add_wo_volume(local_path)
 
-            # Start the file server
+            if is_ro:
+                inputs.append(
+                    tes.Input(
+                        url=the_uri,
+                        path=remote_path,
+                        type="FILE" if os.path.isfile(local_path) else "DIRECTORY",
+                    )
+                )
+            else:
+                outputs.append(
+                    tes.Output(
+                        url=the_uri,
+                        path=remote_path,
+                        type=(
+                            "FILE"
+                            if not local_path_exists or os.path.isfile(local_path)
+                            else "DIRECTORY"
+                        ),
+                    )
+                )
+
+        # Keep the file server running only if it is needed
+        if len(inputs) > 0 or len(outputs) > 0:
             if self.logger.getEffectiveLevel() > logging.DEBUG:
                 file_server.daemonize()
             else:
                 file_server.daemonize("/tmp/ftp-log.txt")
+        else:
+            file_server = None
 
         # Define task
         task = tes.Task(
