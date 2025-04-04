@@ -18,12 +18,16 @@
 
 import abc
 import argparse
+import atexit
 import inspect
 import io
 import logging
 import os
 import pathlib
+import shutil
+import stat
 import sys
+import tempfile
 
 from typing import TYPE_CHECKING
 
@@ -838,8 +842,38 @@ default-cgroupns-mode option on the daemon (default)""",
         file_server: "Optional[FTPServerForTES]" = None
         inputs: "List[tes.Input]" = []
         outputs: "List[tes.Output]" = []
-        if isinstance(args.volume, list):
+
+        tstdin: "Optional[tempfile._TemporaryFileWrapper[bytes]]" = None
+        if args.tty or ("stdin" in args.attach):
+            self.logger.debug("Capturing stdin")
+            capture_stdin = not os.isatty(sys.stdin.fileno())
+            if capture_stdin:
+                mode = os.fstat(sys.stdin.fileno()).st_mode
+                capture_stdin = not (stat.S_ISBLK(mode) or stat.S_ISCHR(mode))
+
+            if capture_stdin:
+                tstdin = tempfile.NamedTemporaryFile(
+                    delete=False, delete_on_close=False
+                )
+                atexit.register(os.unlink, tstdin.name)
+                with tstdin as tFH:
+                    shutil.copyfileobj(sys.stdin.buffer, tFH)
+
+        stdin_input: "Optional[tes.Input]" = None
+        if isinstance(args.volume, list) or tstdin is not None:
             file_server = FTPServerForTES()
+
+            # Add the stdin
+            if tstdin:
+                the_uri = file_server.add_ro_volume(tstdin.name)
+                remote_path = "/" + os.path.basename(tstdin.name)
+                stdin_input = tes.Input(
+                    url=the_uri,
+                    path=remote_path,
+                    type="FILE",
+                )
+                inputs.append(stdin_input)
+
             for volume_decl in args.volume:
                 volume_parts = volume_decl.split(":")
                 flags = ""
@@ -903,6 +937,7 @@ default-cgroupns-mode option on the daemon (default)""",
                     image=args.IMAGE,
                     command=args.CMDARGS,
                     env=task_env,
+                    stdin=None if stdin_input is None else stdin_input.path,
                 )
             ],
             inputs=inputs,
