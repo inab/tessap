@@ -79,8 +79,8 @@ class Resources(Base):
     zones: list[str] | None = attrib(
         default=None, converter=strconv, validator=optional(list_of(str))
     )
-    backend_parameters: list[str] | None = attrib(
-        default=None, converter=strconv, validator=optional(instance_of(list))
+    backend_parameters: dict[str, str] | None = attrib(
+        default=None, validator=optional(instance_of(dict))
     )
     backend_parameters_strict: bool | None = attrib(
         default=None, validator=optional(instance_of(bool))

@@ -24,6 +24,7 @@ import io
 import logging
 import os
 import pathlib
+import re
 import shutil
 import stat
 import sys
@@ -214,6 +215,13 @@ default-cgroupns-mode option on the daemon (default)""",
             metavar="int",
             type=int,
             help="CPU shares (relative weight)",
+        )
+
+        sp.add_argument(
+            "--cpu-count",
+            metavar="int",
+            type=int,
+            help="Number of CPUs",
         )
 
         sp.add_argument(
@@ -973,6 +981,47 @@ default-cgroupns-mode option on the daemon (default)""",
         else:
             file_server = None
 
+        task_resources: "Optional[tes.Resources]" = None
+        cpu_count = 0
+        # Maps --cpu-count
+        if args.cpu_count is not None and args.cpu_count > cpu_count:
+            cpu_count = args.cpu_count
+
+        # Maps --cpus rounding up
+        if args.cpus is not None and round(args.cpus) > cpu_count:
+            cpu_count = round(args.cpus)
+
+        # Maps --memory and --memory-swap to the needed memory (in GB)
+        task_memory: "float" = 0
+        units_div_to_gb = {
+            "g": 1,
+            "m": 1024,
+            "k": 1024**2,
+            "b": 1024**3,
+            "": 1024**3,
+        }
+        for memory_decl in (args.memory, args.memory_swap):
+            if memory_decl is None:
+                continue
+            m = re.match(r"^([0-9]+\.?[0-9]*)([bkmg]?)", memory_decl)
+            if m is None:
+                self.logger.error(f"Wrong memory definition {memory_decl}")
+                return 126
+            if m[2] not in units_div_to_gb:
+                self.logger.error(f"Wrong memory units definition {memory_decl}")
+                return 126
+
+            # The memory, in GB, is computed
+            memory_computed = float(m[1]) / units_div_to_gb[m[2]]
+            if memory_computed > task_memory:
+                task_memory = memory_computed
+
+        if cpu_count > 0 or task_memory > 0:
+            task_resources = tes.Resources(
+                cpu_cores=cpu_count if cpu_count > 0 else None,
+                ram_gb=task_memory if task_memory > 0 else None,
+            )
+
         # Define task
         task = tes.Task(
             executors=[
@@ -987,6 +1036,7 @@ default-cgroupns-mode option on the daemon (default)""",
             inputs=inputs,
             outputs=outputs,
             tags=tags if len(tags) > 0 else None,
+            resources=task_resources,
             name=args.name,
         )
 
