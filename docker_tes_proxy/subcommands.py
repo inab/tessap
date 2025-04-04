@@ -938,6 +938,7 @@ default-cgroupns-mode option on the daemon (default)""",
                     command=args.CMDARGS,
                     env=task_env,
                     stdin=None if stdin_input is None else stdin_input.path,
+                    workdir=args.workdir,
                 )
             ],
             inputs=inputs,
