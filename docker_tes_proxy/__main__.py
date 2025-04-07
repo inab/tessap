@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 
 
 from .argparse_helper import _SubParsersGroupAction
+from .file_server.ftp_server_helper import FTPServerForTES
 from .subcommands import SUBCOMMAND_CLASSES
 
 LOGGING_FORMAT = "%(asctime)-15s - [%(levelname)s] %(message)s"
@@ -280,7 +281,8 @@ def main(
     elif args.command not in subcommand_router:
         return run_local_docker(logger, docker_cmd, args, args.command, *unknown)
     else:
-        subcommand_instance = subcommand_router[args.command](docker_cmd)
+        file_server = FTPServerForTES()
+        subcommand_instance = subcommand_router[args.command](docker_cmd, file_server)
         return subcommand_instance.subcommand(args, unknown)
 
     return 0

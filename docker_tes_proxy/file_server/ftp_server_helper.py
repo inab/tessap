@@ -55,6 +55,7 @@ if TYPE_CHECKING:
         ProtoCmd,
     )
 
+from . import AbstractFileServerForTES
 
 # BEWARE!!!! This is needed because FTP client implementation
 # used by funnel (and funnel itself) forgets the kind of input file
@@ -132,7 +133,7 @@ class DaemonRunningException(Exception):
     pass
 
 
-class FTPServerForTES:
+class FTPServerForTES(AbstractFileServerForTES):
     USER_RO = "user_ro"
     USER_RW = "user_rw"
     USER_WO = "user_wo"
@@ -144,10 +145,11 @@ class FTPServerForTES:
         listen_ip: "str" = "::",
         listen_port: "int" = 2121,
     ):
-        self.logger = logging.getLogger(
-            dict(inspect.getmembers(self))["__module__"]
-            + "::"
-            + self.__class__.__name__
+        super().__init__(
+            public_name=public_name,
+            public_port=public_port,
+            listen_ip=listen_ip,
+            listen_port=listen_port,
         )
 
         self.authorizer = DummyAuthorizer()
@@ -155,11 +157,6 @@ class FTPServerForTES:
         self.handler_clazz = FixedFTPHandler
         self.handler_clazz.authorizer = self.authorizer
         self.handler_clazz.abstracted_fs = PermissiveFS
-
-        self.listen_ip = listen_ip
-        self.listen_port = listen_port
-        self.public_name = public_name
-        self.public_port = listen_port if public_port is None else public_port
 
         # Directories holding the read-only
         # and read-write volumes

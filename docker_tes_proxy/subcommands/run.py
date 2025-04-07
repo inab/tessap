@@ -16,10 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import abc
 import argparse
 import atexit
-import inspect
 import io
 import logging
 import os
@@ -33,8 +31,6 @@ import tempfile
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    import logging
-
     from typing import (
         Any,
         Callable,
@@ -51,51 +47,17 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
-        TypeAlias,
     )
 
-    SubcommandProc: TypeAlias = Callable[
-        [
-            logging.Logger,
-            str,
-            argparse.Namespace,
-            Sequence[str],
-        ],
-        int,
-    ]
+    from ..file_server import (
+        AbstractFileServerForTES,
+    )
 
+from . import AbstractSubcommand
 
-from .ftp_server_helper import FTPServerForTES
 import tes
 
 DEFAULT_DEBUG_HOST: "Final[str]" = "http://localhost:8000"
-
-
-class AbstractSubcommand(abc.ABC):
-    def __init__(self, docker_cmd: "str"):
-        self.logger = logging.getLogger(
-            dict(inspect.getmembers(self))["__module__"]
-            + "::"
-            + self.__class__.__name__
-        )
-
-    @classmethod
-    @abc.abstractmethod
-    def SUBCOMMAND(cls) -> "str":
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def PopulateArgsParser(cls, sp: "argparse.ArgumentParser") -> "None":
-        pass
-
-    @abc.abstractmethod
-    def subcommand(
-        self,
-        args: "argparse.Namespace",
-        unknown: "Sequence[str]",
-    ) -> "int":
-        pass
 
 
 class RunSubcommand(AbstractSubcommand):
@@ -847,7 +809,7 @@ default-cgroupns-mode option on the daemon (default)""",
             cF = None
 
         # Parse the volumes
-        file_server: "Optional[FTPServerForTES]" = None
+        file_server: "Optional[AbstractFileServerForTES]" = None
         inputs: "List[tes.Input]" = []
         outputs: "List[tes.Output]" = []
 
@@ -867,7 +829,7 @@ default-cgroupns-mode option on the daemon (default)""",
                 with tstdin as tFH:
                     shutil.copyfileobj(sys.stdin.buffer, tFH)
 
-        file_server = FTPServerForTES()
+        file_server = self.file_server
 
         stdin_input: "Optional[tes.Input]" = None
         # Add the stdin
@@ -1106,8 +1068,3 @@ default-cgroupns-mode option on the daemon (default)""",
             )
 
         return retval
-
-
-SUBCOMMAND_CLASSES: "Sequence[Type[AbstractSubcommand]]" = [
-    RunSubcommand,
-]
