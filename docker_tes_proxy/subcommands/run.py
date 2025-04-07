@@ -45,10 +45,6 @@ if TYPE_CHECKING:
         Type,
     )
 
-    from typing_extensions import (
-        Final,
-    )
-
     from ..file_server import (
         AbstractFileServerForTES,
     )
@@ -56,8 +52,6 @@ if TYPE_CHECKING:
 from . import AbstractSubcommand
 
 import tes
-
-DEFAULT_DEBUG_HOST: "Final[str]" = "http://localhost:8000"
 
 
 class RunSubcommand(AbstractSubcommand):
@@ -752,19 +746,6 @@ default-cgroupns-mode option on the daemon (default)""",
         if len(args.CMDARGS) == 0:
             return 125
 
-        self.logger.debug(f"args {args}")
-        self.logger.debug(f"unk {unknown}")
-
-        host = (
-            args.host[0]
-            if isinstance(args.host, list) and len(args.host)
-            else DEFAULT_DEBUG_HOST
-        )
-        try:
-            cli = tes.HTTPClient(host, timeout=5)
-        except:
-            return 125
-
         task_env: "Optional[Dict[Any, Any]]" = None
         if isinstance(args.env, list) or isinstance(args.env_file, list):
             task_env = dict()
@@ -1009,7 +990,7 @@ default-cgroupns-mode option on the daemon (default)""",
 
         # Create and run task
         try:
-            task_resp_id = cli.create_task(task)
+            task_resp_id = self.tes_cli.create_task(task)
         except Exception as e:
             self.logger.exception(f"Could not create task")
             return 126
@@ -1032,11 +1013,11 @@ default-cgroupns-mode option on the daemon (default)""",
             return retval
 
         timeout = None
-        w_task = cli.wait(task_resp_id, timeout=timeout)
+        w_task = self.tes_cli.wait(task_resp_id, timeout=timeout)
 
         self.logger.debug(w_task)
 
-        task_info = cli.get_task(
+        task_info = self.tes_cli.get_task(
             task_resp_id, view="FULL" if args.tty or len(args.attach) > 0 else "BASIC"
         )
 

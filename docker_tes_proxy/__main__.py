@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
+        Final,
         NotRequired,
         TypedDict,
     )
@@ -53,6 +54,8 @@ if TYPE_CHECKING:
         format: str
         level: int
 
+
+import tes
 
 from .argparse_helper import _SubParsersGroupAction
 from .file_server.ftp_server_helper import FTPServerForTES
@@ -83,7 +86,7 @@ def run_local_docker(
     logger: "logging.Logger",
     docker_cmd: "str",
     args: "argparse.Namespace",
-    *params: "str"
+    *params: "str",
 ) -> "int":
     retval = subprocess.call(
         [
@@ -164,6 +167,9 @@ LOG_MAPPING = {
     "error": logging.ERROR,
     "fatal": logging.FATAL,
 }
+
+
+DEFAULT_DEBUG_HOST: "Final[str]" = "http://localhost:8000"
 
 
 def main(
@@ -281,8 +287,23 @@ def main(
     elif args.command not in subcommand_router:
         return run_local_docker(logger, docker_cmd, args, args.command, *unknown)
     else:
+        logger.debug(f"args {args}")
+        logger.debug(f"unk {unknown}")
+
+        host = (
+            args.host[0]
+            if hasattr(args, "host") and isinstance(args.host, list) and len(args.host)
+            else DEFAULT_DEBUG_HOST
+        )
+        try:
+            tes_client = tes.HTTPClient(host, timeout=5)
+        except:
+            return 125
+
         file_server = FTPServerForTES()
-        subcommand_instance = subcommand_router[args.command](docker_cmd, file_server)
+        subcommand_instance = subcommand_router[args.command](
+            docker_cmd, tes_client, file_server
+        )
         return subcommand_instance.subcommand(args, unknown)
 
     return 0

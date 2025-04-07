@@ -46,17 +46,25 @@ if TYPE_CHECKING:
         Type,
     )
 
+    import tes
+
     from ..file_server import AbstractFileServerForTES
 
 
 class AbstractSubcommand(abc.ABC):
-    def __init__(self, docker_cmd: "str", file_server: "AbstractFileServerForTES"):
+    def __init__(
+        self,
+        docker_cmd: "str",
+        tes_client: "tes.HTTPClient",
+        file_server: "AbstractFileServerForTES",
+    ):
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
             + "::"
             + self.__class__.__name__
         )
 
+        self.tes_cli = tes_client
         self.file_server = file_server
 
     @classmethod
