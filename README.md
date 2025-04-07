@@ -31,9 +31,9 @@ to work properly.
 | Implemented | Subcommand | Nextflow | cwltool |
 |:-----------:|------------|:--------:|:-------:|
 | :ballot_box_with_check: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: |
-| :black_square_button: | `docker rm` | :ballot_box_with_check: | :black_square_button: |
-| :black_square_button: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
-| :black_square_button: | `docker kill` | :ballot_box_with_check: | :black_square_button: |
+| :ballot_box_with_check: | `docker rm` | :ballot_box_with_check: | :black_square_button: |
+| :ballot_box_with_check: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
+| :ballot_box_with_check: | `docker kill` | :ballot_box_with_check: | :black_square_button: |
 | :ballot_box_with_check: | `docker ps` | :black_square_button: | :black_square_button: |
 | :black_square_button: | `docker pull` | :black_square_button: | :ballot_box_with_check: |
 | :black_square_button: | `docker stats` | :black_square_button: | :ballot_box_with_check: |

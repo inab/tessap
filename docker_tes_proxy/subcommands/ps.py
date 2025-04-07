@@ -17,18 +17,12 @@
 # limitations under the License.
 
 import argparse
-import atexit
 import datetime
-import io
 import json
 import logging
 import os
-import pathlib
 import re
-import shutil
-import stat
 import sys
-import tempfile
 
 from typing import TYPE_CHECKING
 
@@ -116,7 +110,7 @@ JSON_TEMPLATE = [
 ]
 
 
-class RunSubcommand(AbstractSubcommand):
+class PsSubcommand(AbstractSubcommand):
     @classmethod
     def SUBCOMMAND(cls) -> "str":
         return "ps"
