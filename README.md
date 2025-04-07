@@ -35,12 +35,12 @@ to work properly.
 | :ballot_box_with_check: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
 | :ballot_box_with_check: | `docker kill` | :ballot_box_with_check: | :black_square_button: |
 | :ballot_box_with_check: | `docker ps` | :black_square_button: | :black_square_button: |
-| :black_square_button: | `docker pull` | :black_square_button: | :ballot_box_with_check: |
+| :ballot_box_with_check: | `docker pull` | :black_square_button: | :ballot_box_with_check: |
 | :black_square_button: | `docker stats` | :black_square_button: | :ballot_box_with_check: |
-| :black_square_button: | `docker inspect` | :black_square_button: | :ballot_box_with_check: |
-| :black_square_button: | `docker import` | :black_square_button: | :ballot_box_with_check: |
-| :black_square_button: | `docker load` | :black_square_button: | :ballot_box_with_check: |
-| :black_square_button: | `docker build` | :black_square_button: | :ballot_box_with_check: |
+| :ballot_box_with_check: | `docker inspect` | :black_square_button: | :ballot_box_with_check: |
+| :x: | `docker import` | :black_square_button: | :ballot_box_with_check: |
+| :x: | `docker load` | :black_square_button: | :ballot_box_with_check: |
+| :x: | `docker build` | :black_square_button: | :ballot_box_with_check: |
 
 So, most of previous subcommands from `docker` are being implemented in order to mimic it,
 so this shim can bypass the original one in order to forward commands
