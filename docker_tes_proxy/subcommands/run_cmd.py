@@ -803,9 +803,7 @@ default-cgroupns-mode option on the daemon (default)""",
                 capture_stdin = not (stat.S_ISBLK(mode) or stat.S_ISCHR(mode))
 
             if capture_stdin:
-                tstdin = tempfile.NamedTemporaryFile(
-                    delete=False, delete_on_close=False
-                )
+                tstdin = tempfile.NamedTemporaryFile(delete=False)
                 atexit.register(os.unlink, tstdin.name)
                 with tstdin as tFH:
                     shutil.copyfileobj(sys.stdin.buffer, tFH)
