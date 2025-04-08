@@ -21,6 +21,6 @@ __copyright__ = "© 2025 Barcelona Supercomputing Center (BSC), ES"
 __license__ = "Apache 2.0"
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.0.2"
+__version__ = "0.5.0"
 __url__ = "https://github.com/inab/docker-tes-proxy"
 __official_name__ = "docker-tes-proxy"
