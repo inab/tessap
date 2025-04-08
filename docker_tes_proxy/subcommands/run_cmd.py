@@ -256,7 +256,11 @@ default-cgroupns-mode option on the daemon (default)""",
 
         sp.add_argument(
             "--disable-content-trust",
-            action="store_true",
+            nargs="?",
+            action="store",
+            type=bool,
+            const=True,
+            default=False,
             help="Skip image verification",
         )
 
@@ -589,7 +593,11 @@ default-cgroupns-mode option on the daemon (default)""",
 
         sp.add_argument(
             "--read-only",
-            action="store_true",
+            nargs="?",
+            action="store",
+            type=bool,
+            const=True,
+            default=False,
             help="Mount the container's root filesystem as read only",
         )
 
@@ -795,7 +803,8 @@ default-cgroupns-mode option on the daemon (default)""",
         outputs: "List[tes.Output]" = []
 
         tstdin: "Optional[tempfile._TemporaryFileWrapper[bytes]]" = None
-        if args.tty or ("stdin" in args.attach):
+        args_attach = args.attach if isinstance(args.attach, list) else []
+        if args.tty or ("stdin" in args_attach):
             self.logger.debug("Capturing stdin")
             capture_stdin = not os.isatty(sys.stdin.fileno())
             if capture_stdin:
@@ -1016,7 +1025,7 @@ default-cgroupns-mode option on the daemon (default)""",
         self.logger.debug(w_task)
 
         task_info = self.tes_cli.get_task(
-            task_resp_id, view="FULL" if args.tty or len(args.attach) > 0 else "BASIC"
+            task_resp_id, view="FULL" if args.tty or len(args_attach) > 0 else "BASIC"
         )
 
         retval = 126
@@ -1027,10 +1036,10 @@ default-cgroupns-mode option on the daemon (default)""",
 
                 if exec_log.exit_code is not None:
                     retval = exec_log.exit_code
-                if args.tty or ("stdout" in args.attach):
+                if args.tty or ("stdout" in args_attach):
                     if exec_log.stdout is not None:
                         sys.stdout.write(exec_log.stdout)
-                if args.tty or ("stderr" in args.attach):
+                if args.tty or ("stderr" in args_attach):
                     if exec_log.stderr is not None:
                         sys.stderr.write(exec_log.stderr)
 
