@@ -26,6 +26,7 @@ import re
 import shutil
 import stat
 import sys
+import tarfile
 import tempfile
 
 from typing import TYPE_CHECKING
@@ -36,12 +37,14 @@ if TYPE_CHECKING:
         Callable,
         Dict,
         IO,
+        Iterable,
         List,
         Mapping,
         MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
+        Tuple,
         Type,
     )
 
@@ -49,9 +52,147 @@ if TYPE_CHECKING:
         AbstractFileServerForTES,
     )
 
+    from _typeshed import (
+        StrOrBytesPath,
+        StrPath,
+    )
+
 from . import AbstractSubcommand
 
 import tes
+
+from builtins import open as bltn_open
+
+
+class TarFileSkipper(tarfile.TarFile):
+
+    def add_skipping_unreadable(
+        self,
+        name: "StrPath",
+        arcname: "Optional[StrPath]" = None,
+        recursive: "bool" = True,
+        *,
+        filter: "Optional[Callable[[tarfile.TarInfo], tarfile.TarInfo | None]]" = None,
+    ) -> "None":
+        """Add the file `name' to the archive. `name' may be any type of file
+        (directory, fifo, symbolic link, etc.). If given, `arcname'
+        specifies an alternative name for the file in the archive.
+        Directories are added recursively by default. This can be avoided by
+        setting `recursive' to False. `filter' is a function
+        that expects a TarInfo object argument and returns the changed
+        TarInfo object, if it returns None the TarInfo object will be
+        excluded from the archive.
+        """
+        # self._check("awx")
+
+        if arcname is None:
+            arcname = name
+
+        # Skip if somebody tries to archive the archive...
+        if self.name is not None and os.path.abspath(name) == self.name:
+            # self._dbg(2, "tarfile: Skipped %r" % name)
+            return
+
+        # self._dbg(1, name)
+
+        # Create a TarInfo object from the file.
+        tarinfo: "Optional[tarfile.TarInfo]" = self.gettarinfo(name, str(arcname))
+
+        if tarinfo is None:
+            # self._dbg(1, "tarfile: Unsupported type %r" % name)
+            return
+
+        # Change or exclude the TarInfo object.
+        if filter is not None:
+            tarinfo = filter(tarinfo)
+            if tarinfo is None:
+                # self._dbg(2, "tarfile: Excluded %r" % name)
+                return
+
+        # Append the tar header and data to the archive.
+        if tarinfo.isreg():
+            try:
+                with bltn_open(name, "rb") as f:
+                    self.addfile(tarinfo, f)
+            except:
+                # self._dbg(2, "tarfile: Skipped %r due it is unreadable" % name)
+                pass
+
+        elif tarinfo.isdir():
+            self.addfile(tarinfo)
+            if recursive:
+                try:
+                    for lf in sorted(os.listdir(name)):
+                        self.add_skipping_unreadable(
+                            os.path.join(name, lf),
+                            os.path.join(arcname, lf),
+                            recursive,
+                            filter=filter,
+                        )
+                except:
+                    # self._dbg(2, "tarfile: Skipped %r due it is unreadable" % name)
+                    pass
+
+        else:
+            self.addfile(tarinfo)
+
+    def extractall_skipping_unwritable(
+        self,
+        path: "StrOrBytesPath" = ".",
+        members: "Optional[Iterable[tarfile.TarInfo]]" = None,
+        *,
+        numeric_owner: "bool" = False,
+        filter: "Optional[tarfile._TarfileFilter]" = None,
+    ) -> "None":
+        """Extract all members from the archive to the current working
+        directory and set owner, modification time and permissions on
+        directories afterwards. `path' specifies a different directory
+        to extract to. `members' is optional and must be a subset of the
+        list returned by getmembers(). If `numeric_owner` is True, only
+        the numbers for user/group names are used and not the names.
+
+        The `filter` function will be called on each member just
+        before extraction.
+        It can return a changed TarInfo or None to skip the member.
+        String names of common filters are accepted.
+        """
+        directories = []
+
+        filter_function = self._get_filter_function(filter)  # type: ignore[attr-defined]
+        if members is None:
+            members = self
+
+        for member in members:
+            tarinfo = self._get_extract_tarinfo(member, filter_function, path)  # type: ignore[attr-defined]
+            if tarinfo is None:
+                continue
+            if tarinfo.isdir():
+                # For directories, delay setting attributes until later,
+                # since permissions can interfere with extraction and
+                # extracting contents can reset mtime.
+                directories.append(tarinfo)
+            try:
+                self._extract_one(  # type: ignore[attr-defined]
+                    tarinfo,
+                    path,
+                    set_attrs=not tarinfo.isdir(),
+                    numeric_owner=numeric_owner,
+                )
+            except:
+                pass
+
+        # Reverse sort directories.
+        directories.sort(key=lambda a: a.name, reverse=True)
+
+        # Set correct owner, mtime and filemode on directories.
+        for tarinfo in directories:
+            dirpath = os.path.join(path, tarinfo.name)
+            try:
+                self.chown(tarinfo, dirpath, numeric_owner=numeric_owner)
+                self.utime(tarinfo, dirpath)
+                self.chmod(tarinfo, dirpath)
+            except tarfile.ExtractError as e:
+                self._handle_nonfatal_error(e)  # type: ignore[attr-defined]
 
 
 class RunSubcommand(AbstractSubcommand):
@@ -787,6 +928,13 @@ default-cgroupns-mode option on the daemon (default)""",
 
         # Register the task id
         if args.cidfile:
+            if os.path.exists(args.cidfile):
+                print(
+                    f"""\
+docker: container ID file found, make sure the other container isn't running or delete {args.cidfile}.
+See 'docker run --help'."""
+                )
+                return 125
             try:
                 cF = open(args.cidfile, mode="w", encoding="utf-8")
             except Exception as e:
@@ -816,6 +964,10 @@ default-cgroupns-mode option on the daemon (default)""",
                 atexit.register(os.unlink, tstdin.name)
                 with tstdin as tFH:
                     shutil.copyfileobj(sys.stdin.buffer, tFH)
+            else:
+                self.logger.debug(
+                    "--tty or --attach stdin cannot be completely honoured with pipes as there is no STDIN streaming communication in GA4GH TES"
+                )
 
         file_server = self.file_server
 
@@ -881,12 +1033,46 @@ default-cgroupns-mode option on the daemon (default)""",
                 parts = annotation_decl.split("=", 1)
                 tags[parts[0]] = parts[-1]
 
+        task_volumes: "List[str]" = []
+        volume_extractions: "MutableSequence[Tuple[str, str]]" = []
+        volume_packings: "MutableSequence[Tuple[str, str]]" = []
+        local_volume_extractions: "MutableSequence[Tuple[str, str]]" = []
+
+        added_wo_volume: "bool" = False
+        wo_volume_name: "str" = f"/__outputs__{os.getpid()}"
         # Now, process all the volume tuples
         for local_path, remote_path, flags in volumes_tuples:
             local_path_exists = os.path.exists(local_path)
             is_ro = flags.startswith("ro")
+            remote_path_rw = remote_path
 
             if local_path_exists:
+                if os.path.isdir(local_path) and not self.tes_service_supports_dirs:
+                    # The destination for the content
+                    local_path_dir = local_path
+                    remote_path_dir = remote_path
+
+                    task_volumes.append(remote_path_dir)
+
+                    volume_tar_file = tempfile.NamedTemporaryFile(delete=False)
+                    local_path = volume_tar_file.name
+                    atexit.register(os.unlink, local_path)
+
+                    with TarFileSkipper.open(
+                        local_path, mode="w:gz", bufsize=10 * 1024**2
+                    ) as vtFH:
+                        vtFH.add_skipping_unreadable(local_path_dir, arcname=".")
+
+                    remote_path = "/__tars__/" + os.path.basename(local_path)
+                    remote_path_rw = "/__rw__/" + os.path.basename(local_path)
+
+                    volume_extractions.append((remote_path, remote_path_dir))
+                    if not is_ro:
+                        volume_packings.append((remote_path_dir, remote_path_rw))
+                        local_volume_extractions.append((local_path, local_path_dir))
+                else:
+                    remote_path_rw = "/__rw__" + remote_path
+
                 if is_ro:
                     the_uri = file_server.add_ro_volume(local_path)
                 else:
@@ -899,9 +1085,29 @@ default-cgroupns-mode option on the daemon (default)""",
                 )
                 return 126
             else:
+                if not added_wo_volume:
+                    task_volumes.append(wo_volume_name)
+                if not self.tes_service_supports_dirs:
+                    local_path_dir = local_path
+                    remote_path_dir = remote_path
+
+                    volume_tar_file = tempfile.NamedTemporaryFile(delete=False)
+                    # It should not exist
+                    os.unlink(volume_tar_file.name)
+                    atexit.register(os.unlink, volume_tar_file.name)
+
+                    local_path = volume_tar_file.name
+
+                    task_volumes.append(remote_path_dir)
+
+                    remote_path_rw = wo_volume_name + "/" + os.path.basename(local_path)
+
+                    volume_packings.append((remote_path_dir, remote_path_rw))
+                    local_volume_extractions.append((local_path, local_path_dir))
+
                 the_uri = file_server.add_wo_volume(local_path)
 
-            if is_ro:
+            if local_path_exists:
                 inputs.append(
                     tes.Input(
                         url=the_uri,
@@ -909,11 +1115,11 @@ default-cgroupns-mode option on the daemon (default)""",
                         type="FILE" if os.path.isfile(local_path) else "DIRECTORY",
                     )
                 )
-            else:
+            if not is_ro:
                 outputs.append(
                     tes.Output(
                         url=the_uri,
-                        path=remote_path,
+                        path=remote_path_rw,
                         type=(
                             "FILE"
                             if not local_path_exists or os.path.isfile(local_path)
@@ -972,28 +1178,58 @@ default-cgroupns-mode option on the daemon (default)""",
                 ram_gb=task_memory if task_memory > 0 else None,
             )
 
+        executors = []
+        if len(volume_extractions) > 0:
+            executors.append(
+                tes.Executor(
+                    image="alpine:3.12",
+                    command=[
+                        "sh",
+                        "-c",
+                        'for A in "$@"; do tar -x -C "${A#*:}" -f "${A%%:*}" ; done',
+                        "extractor",
+                        *map(lambda ve: ve[0] + ":" + ve[1], volume_extractions),
+                    ],
+                )
+            )
+
+        main_task_idx = len(executors)
+        executors.append(
+            tes.Executor(
+                image=args.IMAGE,
+                command=args.CMDARGS,
+                env=task_env,
+                stdin=None if stdin_input is None else stdin_input.path,
+                workdir=args.workdir,
+            )
+        )
+
+        if len(volume_packings) > 0:
+            executors.append(
+                tes.Executor(
+                    image="alpine:3.12",
+                    command=[
+                        "sh",
+                        "-c",
+                        'for A in "$@"; do if [ -f "${A%%:*}" ] ; then cp -p "${A%%:*}" "${A#*:}" ; else tar -c -z -C "${A%%:*}" -f "${A#*:}" . ; fi ; done',
+                        "packer",
+                        *map(lambda vp: vp[0] + ":" + vp[1], volume_packings),
+                    ],
+                )
+            )
+
         # Define task
         task = tes.Task(
-            executors=[
-                tes.Executor(
-                    image=args.IMAGE,
-                    command=args.CMDARGS,
-                    env=task_env,
-                    stdin=None if stdin_input is None else stdin_input.path,
-                    workdir=args.workdir,
-                )
-            ],
+            executors=executors,
             inputs=inputs,
             outputs=outputs,
+            volumes=task_volumes if len(task_volumes) > 0 else None,
             tags=tags if len(tags) > 0 else None,
             resources=task_resources,
             name=args.name,
         )
 
-        if args.interactive:
-            self.logger.debug(
-                "--interactive cannot be honoured as there is no STDIN streaming communication in GA4GH TES"
-            )
+        self.logger.debug(task.as_json(indent=4))
 
         # Create and run task
         try:
@@ -1025,23 +1261,38 @@ default-cgroupns-mode option on the daemon (default)""",
         self.logger.debug(w_task)
 
         task_info = self.tes_cli.get_task(
-            task_resp_id, view="FULL" if args.tty or len(args_attach) > 0 else "BASIC"
+            task_resp_id,
+            view="FULL" if args.interactive or len(args_attach) > 0 else "BASIC",
         )
+
+        if isinstance(task_info.logs, list):
+            self.logger.debug(f"Log entries {len(task_info.logs)}")
+            for task_log in task_info.logs:
+                if isinstance(task_log.logs, list):
+                    self.logger.debug(f"Exec Log entries {len(task_log.logs)}")
 
         retval = 126
         if isinstance(task_info.logs, list) and len(task_info.logs) > 0:
             task_log = task_info.logs[-1]
-            if isinstance(task_log.logs, list) and len(task_log.logs) > 0:
-                exec_log = task_log.logs[-1]
+            if isinstance(task_log.logs, list) and len(task_log.logs) > main_task_idx:
+                exec_log = task_log.logs[main_task_idx]
 
                 if exec_log.exit_code is not None:
                     retval = exec_log.exit_code
-                if args.tty or ("stdout" in args_attach):
+                if args.interactive or ("stdout" in args_attach):
                     if exec_log.stdout is not None:
                         sys.stdout.write(exec_log.stdout)
-                if args.tty or ("stderr" in args_attach):
+                if args.interactive or ("stderr" in args_attach):
                     if exec_log.stderr is not None:
                         sys.stderr.write(exec_log.stderr)
+
+        # Now, post-processing of results
+        for tarfile, destpath in local_volume_extractions:
+            self.logger.debug(f"extract {tarfile} => {destpath}")
+            with TarFileSkipper.open(tarfile, mode="r:*") as tfH:
+                # This is needed for cases where locally read-only content
+                # is remotely updated because the volume was writable
+                tfH.extractall_skipping_unwritable(destpath)
 
         if file_server is not None:
             file_server.synchronize()

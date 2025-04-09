@@ -97,3 +97,17 @@ For other commands, the line is passed to the locally installed docker binary.
    ```bash
    python docker.py run -v ./README.md:/SOME.md:ro -v ./transferred.md:/tmp/OTHER.md --rm -ti ubuntu:22.04 cp /SOME.md /tmp/OTHER.md
    ```
+
+5. To test the latest version working with cwltool, create a separate python environment, install both cwltool and docker-tes-proxy and start testing a toy workflow.
+It assumes funnel is already running locally at port 8000:
+
+   ```bash
+   python3 -mvenv cwl_docker_proxy_tes
+   source cwl_docker_proxy_tes/bin/activate
+   pip install --upgrade pip wheel
+   pip install 'git+https://github.com/inab/docker-tes-proxy.git'
+   pip install cwltool
+   git clone https://github.com/inab/hello-workflows
+   cd hello-workflows/cwl
+   cwltool --disable-pull hello-workflow.cwl hello.yml
+   ```

@@ -57,6 +57,7 @@ class AbstractSubcommand(abc.ABC):
         docker_cmd: "str",
         tes_client: "tes.HTTPClient",
         file_server: "AbstractFileServerForTES",
+        tes_service_supports_dirs: "bool" = True,
     ):
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
@@ -66,6 +67,9 @@ class AbstractSubcommand(abc.ABC):
 
         self.tes_cli = tes_client
         self.file_server = file_server
+        self.tes_service_supports_dirs = (
+            tes_service_supports_dirs and file_server.supports_dirs
+        )
 
     @classmethod
     @abc.abstractmethod

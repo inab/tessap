@@ -267,6 +267,7 @@ def main(
         log_level_str = args.log_level
 
     log_level = LOG_MAPPING.get(log_level_str, logging.INFO)
+    # log_level = logging.DEBUG
     if log_level < logging.INFO:
         log_format = DEBUG_LOGGING_FORMAT
     else:
@@ -276,6 +277,7 @@ def main(
         "level": log_level,
         "format": log_format,
     }
+    # logging_config["filename"] = "/tmp/romulo_remo.txt"
     logging.basicConfig(**logging_config)
     logger = logging.getLogger("docker-tes-proxy")
 
@@ -295,14 +297,23 @@ def main(
             if hasattr(args, "host") and isinstance(args.host, list) and len(args.host)
             else DEFAULT_DEBUG_HOST
         )
+        # We want to believe
+        file_server = FTPServerForTES()
+        tes_service_supports_dirs = True
         try:
             tes_client = tes.HTTPClient(host, timeout=5)
+            service_info = tes_client.get_service_info()
+            tes_service_supports_dirs = (
+                service_info.id not in ("org.ga4gh.funnel",)
+            ) or not isinstance(file_server, FTPServerForTES)
         except:
             return 125
 
-        file_server = FTPServerForTES()
         subcommand_instance = subcommand_router[args.command](
-            docker_cmd, tes_client, file_server
+            docker_cmd,
+            tes_client,
+            file_server,
+            tes_service_supports_dirs=tes_service_supports_dirs,
         )
         return subcommand_instance.subcommand(args, unknown)
 

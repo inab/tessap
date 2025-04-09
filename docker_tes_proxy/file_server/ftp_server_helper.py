@@ -190,6 +190,10 @@ class FTPServerForTES(AbstractFileServerForTES):
 
         self.daemon_pid: "Optional[int]" = None
 
+    @property
+    def supports_dirs(self) -> "bool":
+        return True
+
     def add_ro_volume(self, local_path: "Union[str, os.PathLike[str]]") -> "str":
         if self.daemon_pid is not None:
             self.logger.warning(

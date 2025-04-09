@@ -52,6 +52,11 @@ class AbstractFileServerForTES(abc.ABC):
         self.public_name = public_name
         self.public_port = listen_port if public_port is None else public_port
 
+    @property
+    @abc.abstractmethod
+    def supports_dirs(self) -> "bool":
+        pass
+
     @abc.abstractmethod
     def add_ro_volume(self, local_path: "Union[str, os.PathLike[str]]") -> "str":
         pass
