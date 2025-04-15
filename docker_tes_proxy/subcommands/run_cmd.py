@@ -44,8 +44,10 @@ if TYPE_CHECKING:
         MutableSequence,
         Optional,
         Sequence,
+        Set,
         Tuple,
         Type,
+        Union,
     )
 
     from ..file_server import (
@@ -71,6 +73,7 @@ class TarFileSkipper(tarfile.TarFile):
         name: "StrPath",
         arcname: "Optional[StrPath]" = None,
         recursive: "bool" = True,
+        skip_names: "Set[str]" = set(),
         *,
         filter: "Optional[Callable[[tarfile.TarInfo], tarfile.TarInfo | None]]" = None,
     ) -> "None":
@@ -123,6 +126,9 @@ class TarFileSkipper(tarfile.TarFile):
             if recursive:
                 try:
                     for lf in sorted(os.listdir(name)):
+                        # Skip these names
+                        if lf in skip_names:
+                            continue
                         self.add_skipping_unreadable(
                             os.path.join(name, lf),
                             os.path.join(arcname, lf),
@@ -895,6 +901,34 @@ default-cgroupns-mode option on the daemon (default)""",
         if len(args.CMDARGS) == 0:
             return 125
 
+        # Let's detect whether this shim was called from Nextflow
+        NXF_TASK_WORKDIR: "Optional[str]" = None
+        NXF_TASK_WORKDIR_RO: "Optional[str]" = None
+        num_nxf_vars: "int" = 0
+        for keyname in os.environ.keys():
+            if keyname.startswith("NXF_"):
+                num_nxf_vars += 1
+                if keyname == "NXF_TASK_WORKDIR":
+                    NXF_TASK_WORKDIR = os.environ[keyname]
+                self.logger.debug(f"Matched Nextflow envvar {keyname}")
+            elif keyname == "PATH":
+                self.logger.debug(f"PATH => {os.environ['PATH']}")
+
+        # At least NXF_BOXID, NXF_CLI, NXF_ORG and NXF_HOME
+        if num_nxf_vars >= 4 and args.workdir is not None:
+            if NXF_TASK_WORKDIR is not None and NXF_TASK_WORKDIR != args.workdir:
+                self.logger.debug(
+                    f"Mismatch in workdir: {NXF_TASK_WORKDIR} vs {args.workdir}"
+                )
+
+            NXF_TASK_WORKDIR = args.workdir
+            if TYPE_CHECKING:
+                assert NXF_TASK_WORKDIR is not None
+            NXF_TASK_WORKDIR_RO = NXF_TASK_WORKDIR + "_ro"
+        else:
+            self.logger.debug("Disabling misdetected Nextflow call")
+            NXF_TASK_WORKDIR = None
+
         task_env: "Optional[Dict[Any, Any]]" = None
         if isinstance(args.env, list) or isinstance(args.env_file, list):
             task_env = dict()
@@ -984,7 +1018,7 @@ See 'docker run --help'."""
             inputs.append(stdin_input)
 
         # The digested volume tuples are stored here
-        volumes_tuples = []
+        volumes_tuples: "MutableSequence[Tuple[str, str, Union[str, Set[str]]]]" = []
 
         # --volume
         if isinstance(args.volume, list):
@@ -1035,19 +1069,79 @@ See 'docker run --help'."""
 
         task_volumes: "List[str]" = []
         volume_extractions: "MutableSequence[Tuple[str, str]]" = []
-        volume_packings: "MutableSequence[Tuple[str, str]]" = []
+        volume_packings: "MutableSequence[Tuple[str, str, Set[str]]]" = []
         local_volume_extractions: "MutableSequence[Tuple[str, str]]" = []
 
         added_wo_volume: "bool" = False
         wo_volume_name: "str" = f"/__outputs__{os.getpid()}"
+
+        # Populate the list of volumes to remove
+        # now we know we have to "improve" Nextflow setup
+        skip_volumes: "Set[str]" = set()
+        if NXF_TASK_WORKDIR_RO is not None:
+            # First the task ro volume for input only files and directories
+            self.logger.debug(f"Before tuples {volumes_tuples}")
+
+            # Now, translate the symlinks into ro volumes
+            skip_entries: "Set[str]" = set()
+            for entry in os.scandir(NXF_TASK_WORKDIR):
+                # Symlink
+                if entry.is_symlink():
+                    skip_entries.add(entry.name)
+                    sympath = os.readlink(entry.path)
+                    if os.path.isabs(sympath):
+                        if os.path.isdir(sympath):
+                            skip_volumes.add(sympath)
+                        else:
+                            skip_volumes.add(os.path.dirname(sympath))
+                        # Now, let's inject the right volume
+                        volumes_tuples.append(
+                            (
+                                sympath,
+                                os.path.join(NXF_TASK_WORKDIR_RO, entry.name),
+                                "ro",
+                            )
+                        )
+                elif entry.is_file() and entry.stat().st_nlink > 1:
+                    # Hardlink
+                    volumes_tuples.append(
+                        (
+                            entry.path,
+                            os.path.join(NXF_TASK_WORKDIR_RO, entry.name),
+                            "ro",
+                        )
+                    )
+
+            if TYPE_CHECKING:
+                assert NXF_TASK_WORKDIR is not None
+            volumes_tuples = list(
+                filter(
+                    lambda vt: vt[0] != vt[1]
+                    or (
+                        os.path.commonpath([NXF_TASK_WORKDIR, vt[0]]) != vt[0]
+                        and (vt[0] not in skip_volumes)
+                    ),
+                    volumes_tuples,
+                )
+            )
+
+            volumes_tuples.append((NXF_TASK_WORKDIR, NXF_TASK_WORKDIR, skip_entries))
+            self.logger.debug(f"After tuples {volumes_tuples}")
+            self.logger.debug(f"Skip volumes {skip_volumes}")
+
         # Now, process all the volume tuples
-        for local_path, remote_path, flags in volumes_tuples:
+        for local_path, remote_path, flags_or_skip in volumes_tuples:
             local_path_exists = os.path.exists(local_path)
-            is_ro = flags.startswith("ro")
+            is_ro = isinstance(flags_or_skip, str) and flags_or_skip.startswith("ro")
             remote_path_rw = remote_path
 
             if local_path_exists:
-                if os.path.isdir(local_path) and not self.tes_service_supports_dirs:
+                if os.path.isdir(local_path) and (
+                    not self.tes_service_supports_dirs or isinstance(flags_or_skip, set)
+                ):
+                    skip_names = (
+                        flags_or_skip if isinstance(flags_or_skip, set) else set()
+                    )
                     # The destination for the content
                     local_path_dir = local_path
                     remote_path_dir = remote_path
@@ -1061,14 +1155,18 @@ See 'docker run --help'."""
                     with TarFileSkipper.open(
                         local_path, mode="w:gz", bufsize=10 * 1024**2
                     ) as vtFH:
-                        vtFH.add_skipping_unreadable(local_path_dir, arcname=".")
+                        vtFH.add_skipping_unreadable(
+                            local_path_dir, arcname=".", skip_names=skip_names
+                        )
 
                     remote_path = "/__tars__/" + os.path.basename(local_path)
                     remote_path_rw = "/__rw__/" + os.path.basename(local_path)
 
                     volume_extractions.append((remote_path, remote_path_dir))
                     if not is_ro:
-                        volume_packings.append((remote_path_dir, remote_path_rw))
+                        volume_packings.append(
+                            (remote_path_dir, remote_path_rw, skip_names)
+                        )
                         local_volume_extractions.append((local_path, local_path_dir))
                 else:
                     remote_path_rw = "/__rw__" + remote_path
@@ -1102,7 +1200,7 @@ See 'docker run --help'."""
 
                     remote_path_rw = wo_volume_name + "/" + os.path.basename(local_path)
 
-                    volume_packings.append((remote_path_dir, remote_path_rw))
+                    volume_packings.append((remote_path_dir, remote_path_rw, set()))
                     local_volume_extractions.append((local_path, local_path_dir))
 
                 the_uri = file_server.add_wo_volume(local_path)
@@ -1193,14 +1291,52 @@ See 'docker run --help'."""
                 )
             )
 
+        # Created the proper symlinks for the read only contents
+        if NXF_TASK_WORKDIR_RO is not None:
+            executors.append(
+                tes.Executor(
+                    image="alpine:3.12",
+                    command=[
+                        "sh",
+                        "-c",
+                        'ln -s "$1"/* "$2"',
+                        "symlinker",
+                        NXF_TASK_WORKDIR_RO,
+                        NXF_TASK_WORKDIR,
+                    ],
+                )
+            )
+
+            # executors.append(
+            #    tes.Executor(
+            #        image="alpine:3.12",
+            #        command=[
+            #            "sh",
+            #            "-c",
+            #            '(for A in "$@" ; do echo "$A" ; ls -la "$A" ; done) 1>&2 ; exit 9',
+            #            "debugger",
+            #            NXF_TASK_WORKDIR_RO,
+            #            NXF_TASK_WORKDIR,
+            #        ],
+            #    )
+            # )
+
+        cmdargs: "Sequence[str]" = args.CMDARGS
+        # Several nextflow versions use the dirty trick of
+        # overriding the entrypoint, building an incomplete
+        # command line
+        if args.entrypoint is not None:
+            cmdargs = [args.entrypoint, *args.CMDARGS]
         main_task_idx = len(executors)
         executors.append(
             tes.Executor(
                 image=args.IMAGE,
-                command=args.CMDARGS,
+                command=cmdargs,
                 env=task_env,
                 stdin=None if stdin_input is None else stdin_input.path,
                 workdir=args.workdir,
+                # This is needed, so the last step saves back what it was generated
+                ignore_error=True,
             )
         )
 
@@ -1211,9 +1347,16 @@ See 'docker run --help'."""
                     command=[
                         "sh",
                         "-c",
-                        'for A in "$@"; do if [ -f "${A%%:*}" ] ; then cp -p "${A%%:*}" "${A#*:}" ; else tar -c -z -C "${A%%:*}" -f "${A#*:}" . ; fi ; done',
+                        'for A in "$@"; do from="${A%%:*}" ; toexcl="${A#*:}" ; to="${toexcl%%:*}" ; if [ -f "$from" ] ; then cp -p "$from" "$to" ; else excl_raw="${toexcl#*:}" ; if [ -z "$excl_raw" ] ; then excl="" ; else excl="$(echo "$excl_raw" | tr ":" "\n" | xargs -n 1 echo --exclude)" ; fi ; tar $excl -c -z -C "$from" -f "$to" . ; fi ; done',
                         "packer",
-                        *map(lambda vp: vp[0] + ":" + vp[1], volume_packings),
+                        *map(
+                            lambda vp: vp[0]
+                            + ":"
+                            + vp[1]
+                            + ":"
+                            + (":".join(vp[2]) if isinstance(vp[2], set) else ""),
+                            volume_packings,
+                        ),
                     ],
                 )
             )
