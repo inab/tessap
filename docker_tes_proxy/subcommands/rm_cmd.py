@@ -48,6 +48,8 @@ if TYPE_CHECKING:
         AbstractFileServerForTES,
     )
 
+    import tes
+
 from . import AbstractSubcommand
 
 
@@ -112,23 +114,35 @@ class RmSubcommand(AbstractSubcommand):
             self.logger.debug(f"--force is only partially emulated in GA4GH TES")
 
         for task_id in args.CONTAINER:
+            real_task_id = task_id
+            the_task: "Optional[tes.Task]" = None
             try:
-                task = self.tes_cli.get_task(task_id)
-                if args.force and task.state in (
-                    "QUEUED",
-                    "INITIALIZING",
-                    "RUNNING",
-                    "PAUSED",
-                    "PREEMPTED",
-                ):
-                    try:
-                        self.tes_cli.cancel_task(task_id)
-                        print(task_id)
-                    except Exception as e:
-                        retval = 1
-                        self.logger.exception(f"Error while cancelling task {task_id}")
-
+                the_task = self.tes_cli.get_task(task_id)
             except Exception as e:
+                if self.logger.getEffectiveLevel() <= logging.DEBUG:
+                    self.logger.exception(f"Could not find task {task_id}")
+
+            if the_task is None:
+                # Searching by task name
+                more_tasks = True
+                page_token: "Optional[str]" = None
+                while more_tasks:
+                    tasks_ans = self.tes_cli.list_tasks(
+                        view="BASIC", page_token=page_token
+                    )
+                    if tasks_ans.tasks is not None:
+                        for task in tasks_ans.tasks:
+                            if task.name == task_id:
+                                the_task = task
+                                real_task_id = task.id
+                                more_tasks = False
+                                break
+
+                    page_token = tasks_ans.next_page_token
+                    if page_token in (None, ""):
+                        more_tasks = False
+
+            if the_task is None:
                 if self.logger.getEffectiveLevel() <= logging.DEBUG:
                     self.logger.exception(f"Could not find task {task_id}")
                 print(
@@ -136,5 +150,18 @@ class RmSubcommand(AbstractSubcommand):
                     file=sys.stderr,
                 )
                 retval = 1
+            elif args.force or the_task.state in (
+                "QUEUED",
+                "INITIALIZING",
+                "RUNNING",
+                "PAUSED",
+                "PREEMPTED",
+            ):
+                try:
+                    self.tes_cli.cancel_task(task_id)
+                    print(task_id)
+                except Exception as e:
+                    retval = 1
+                    self.logger.exception(f"Error while cancelling task {task_id}")
 
         return retval
