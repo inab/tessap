@@ -266,6 +266,7 @@ def main(
     elif args.log_level is not None:
         log_level_str = args.log_level
 
+    # log_level_str = "debug"
     log_level = LOG_MAPPING.get(log_level_str, logging.INFO)
     # log_level = logging.DEBUG
     if log_level < logging.INFO:
