@@ -25,26 +25,36 @@ meanwhile the command line compatibility is kept.
 
 ## Currently subcommands being implemented
 
-Each workflow engine depends on a subset of docker subcommands in order
+Each workflow engine and workflow orchestrator depends on a subset of docker subcommands in order
 to work properly.
 
-| Implemented | Subcommand | Nextflow | cwltool |
-|:-----------:|------------|:--------:|:-------:|
-| :ballot_box_with_check: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: |
-| :ballot_box_with_check: | `docker rm` | :ballot_box_with_check: | :black_square_button: |
-| :ballot_box_with_check: | `docker stop` | :ballot_box_with_check: | :black_square_button: |
-| :ballot_box_with_check: | `docker kill` | :ballot_box_with_check: | :black_square_button: |
-| :ballot_box_with_check: | `docker ps` | :black_square_button: | :black_square_button: |
-| :ballot_box_with_check: | `docker pull` | :black_square_button: | :ballot_box_with_check: |
-| :heavy_exclamation_mark: | `docker stats` | :black_square_button: | :ballot_box_with_check: |
-| :ballot_box_with_check: | `docker inspect` | :black_square_button: | :ballot_box_with_check: |
-| :x: | `docker import` | :black_square_button: | :ballot_box_with_check: |
-| :x: | `docker load` | :black_square_button: | :ballot_box_with_check: |
-| :x: | `docker build` | :black_square_button: | :ballot_box_with_check: |
+| Implemented | Subcommand | Nextflow | cwltool | WfExS-backend |
+|:-----------:|------------|:--------:|:-------:|:-------------:|
+| :white_check_mark: | `docker run` | :ballot_box_with_check: | :ballot_box_with_check: | :link: |
+| :white_check_mark: | `docker rm` | :ballot_box_with_check: | :black_square_button: | :link: |
+| :white_check_mark: | `docker stop` | :ballot_box_with_check: | :black_square_button: | :link: |
+| :white_check_mark: | `docker kill` | :ballot_box_with_check: | :black_square_button: | :link: |
+| :white_check_mark: | `docker ps` | :black_square_button: | :black_square_button: | :black_square_button: |
+| :white_check_mark: | `docker pull` | :black_square_button: | :ballot_box_with_check: | :ballot_box_with_check: |
+| :performing_arts: | `docker stats` | :black_square_button: | :ballot_box_with_check: | :link: |
+| :white_check_mark: | `docker inspect` | :black_square_button: | :ballot_box_with_check: | :ballot_box_with_check: |
+| :x: | `docker import` | :black_square_button: | :ballot_box_with_check: | :link: |
+| :construction: | `docker load` | :black_square_button: | :ballot_box_with_check: | :ballot_box_with_check: |
+| :x: | `docker build` | :black_square_button: | :ballot_box_with_check: | :link: |
+| :construction: | `docker save` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
+| :construction: | `docker images` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
+| :construction: | `docker tag` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
+| :construction: | `docker rmi` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
+| :construction: | `docker version` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
 
-So, most of previous subcommands from `docker` are being implemented in order to mimic it,
-so this shim can bypass the original one in order to forward commands
-to a set up GA4GH TES service. As 
+So, most of previous subcommands from `docker` are already implemented (:white_check_mark:) or
+faked (:performing_arts:). Other ones are going to be implemented or faked (:construction:),
+and a few ones are not going to be even tried (:x:).
+
+The implemented commands bypass the original implementation,
+they try to mimic the original commands implementation,
+through either forwarded calls to a set up GA4GH TES service,
+or calls to the corresponding docker registries.
 
 For other commands, the line is passed to the locally installed docker binary.
 
