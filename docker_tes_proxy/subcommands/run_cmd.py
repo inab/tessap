@@ -911,8 +911,6 @@ default-cgroupns-mode option on the daemon (default)""",
                 if keyname == "NXF_TASK_WORKDIR":
                     NXF_TASK_WORKDIR = os.environ[keyname]
                 self.logger.debug(f"Matched Nextflow envvar {keyname}")
-            elif keyname == "PATH":
-                self.logger.debug(f"PATH => {os.environ['PATH']}")
 
         # At least NXF_BOXID, NXF_CLI, NXF_ORG and NXF_HOME
         if num_nxf_vars >= 4 and args.workdir is not None:
@@ -1111,6 +1109,22 @@ See 'docker run --help'."""
                             "ro",
                         )
                     )
+
+            # Now, look for special PATH declarations related to bin
+            for cmdarg in args.CMDARGS:
+                if cmdarg.startswith("eval "):
+                    semicolon_pos = cmdarg.find(";")
+                    if semicolon_pos != -1:
+                        evalarg = cmdarg[len("eval ") : semicolon_pos].strip()
+                        for match in re.finditer(
+                            r"([^\n =]+)=(['\"]?)([^\"]*)\2[\n ]?", evalarg
+                        ):
+                            if match[1] == "PATH":
+                                for path_token in match[3].split(":"):
+                                    if path_token.startswith("/"):
+                                        volumes_tuples.append(
+                                            (path_token, path_token, "ro")
+                                        )
 
             if TYPE_CHECKING:
                 assert NXF_TASK_WORKDIR is not None
