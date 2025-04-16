@@ -126,14 +126,12 @@ It assumes funnel is already running locally at port 8000:
 It assumes funnel is already running locally at port 8000:
 
    ```bash
-   python3 -mvenv cwl_docker_proxy_tes
-   source cwl_docker_proxy_tes/bin/activate
+   python3 -mvenv nextflow_docker_proxy_tes
+   source nextflow_docker_proxy_tes/bin/activate
    pip install --upgrade pip wheel
    pip install 'git+https://github.com/inab/docker-tes-proxy.git'
-   pip install cwltool
    git clone https://github.com/inab/hello-workflows
-   cd hello-workflows/nextflow-dsl2-20.10.0
    wget https://github.com/nextflow-io/nextflow/releases/download/v24.10.5/nextflow-24.10.5-dist
    chmod +x nextflow-24.10.5-dist
-   ./nextflow-24.10.5-dist run -profile docker .
+   ./nextflow-24.10.5-dist run -profile docker hello-workflows/nextflow-dsl2-20.10.0
    ```
