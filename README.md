@@ -47,9 +47,9 @@ to work properly.
 | :construction: | `docker rmi` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
 | :construction: | `docker version` | :black_square_button: | :black_square_button: | :ballot_box_with_check: |
 
-So, most of previous subcommands from `docker` are already implemented (:white_check_mark:) or
-faked (:performing_arts:). Other ones are going to be implemented or faked (:construction:),
-and a few ones are not going to be even tried (:x:).
+So, most of previous subcommands from `docker` are already implemented ( :white_check_mark: ) or
+faked ( :performing_arts: ). Other ones are going to be implemented or faked ( :construction: ),
+and a few ones are not going to be even tried ( :x: ).
 
 The implemented commands bypass the original implementation,
 they try to mimic the original commands implementation,
