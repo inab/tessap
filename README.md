@@ -1,6 +1,6 @@
-# docker-tes-proxy
+# TESSAP (TES Service Adapter Proxy) 
 
-A docker shim which submits commands to a GA4GH TES service.
+TESSAP is a docker to GA4GH TES service proxy, i.e. a docker shim which submits commands to a GA4GH TES service.
 
 ## Introduction
 
