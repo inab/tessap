@@ -169,7 +169,7 @@ class TarFileSkipper(tarfile.TarFile):
             members = self
 
         for member in members:
-            tarinfo = self._get_extract_tarinfo(member, filter_function, path)  # type: ignore[attr-defined]
+            tarinfo, _ = self._get_extract_tarinfo(member, filter_function, path)  # type: ignore[attr-defined]
             if tarinfo is None:
                 continue
             if tarinfo.isdir():
