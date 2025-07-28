@@ -1007,10 +1007,10 @@ See 'docker run --help'."""
         # Add the stdin
         if tstdin:
             the_uri = file_server.add_ro_volume(tstdin.name)
-            remote_path = "/" + os.path.basename(tstdin.name)
+            remote_path_t = "/" + os.path.basename(tstdin.name)
             stdin_input = tes.Input(
                 url=the_uri,
-                path=remote_path,
+                path=remote_path_t,
                 type="FILE",
             )
             inputs.append(stdin_input)
@@ -1025,17 +1025,17 @@ See 'docker run --help'."""
                 flags = ""
                 if len(volume_parts) == 1:
                     local_path = volume_parts
-                    remote_path = pathlib.Path(local_path).resolve().as_posix()
+                    remote_path_v = pathlib.Path(local_path).resolve().as_posix()
                 else:
-                    local_path, remote_path = volume_parts[0:2]
+                    local_path, remote_path_v = volume_parts[0:2]
                     if len(volume_parts) > 2:
                         flags = volume_parts[2]
-                volumes_tuples.append((local_path, remote_path, flags))
+                volumes_tuples.append((local_path, remote_path_v, flags))
 
         # subset of --mount
         if isinstance(args.mount, list):
             for mount_decl in args.mount:
-                mount_attrs = {}
+                mount_attrs: "MutableMapping[str, str]" = {}
                 mount_parts = mount_decl.split(",")
                 for mount_part in mount_parts:
                     keyval = mount_part.split("=", 1)
@@ -1043,16 +1043,19 @@ See 'docker run --help'."""
 
                 if mount_attrs.get("type") == "bind":
                     local_path = mount_attrs.get("src", mount_attrs.get("source"))
-                    remote_path = mount_attrs.get(
-                        "dst", mount_attrs.get("destination", mount_attrs.get("target"))
-                    )
+                    remote_path_m = mount_attrs.get("dst")
+                    if remote_path_m is None:
+                        remote_path_m = mount_attrs.get("destination")
+                        if remote_path_m is None:
+                            remote_path_m = mount_attrs.get("target")
+
                     flags = (
                         "ro"
                         if ("ro" in mount_attrs) or ("readonly" in mount_attrs)
                         else ""
                     )
-                    if local_path is not None and remote_path is not None:
-                        volumes_tuples.append((local_path, remote_path, flags))
+                    if local_path is not None and remote_path_m is not None:
+                        volumes_tuples.append((local_path, remote_path_m, flags))
                 else:
                     self.logger.debug(
                         f"--mount={mount_decl} cannot be honoured, as only type=bind can be emulated in GA4GH TES"
