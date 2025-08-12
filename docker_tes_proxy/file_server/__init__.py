@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import abc
+import importlib
 import inspect
 import logging
 
@@ -29,8 +30,12 @@ if TYPE_CHECKING:
 
     from typing import (
         Optional,
+        Sequence,
+        Type,
         Union,
     )
+
+from ..misc.common_discovery import implemented_classes_in_module
 
 
 class AbstractFileServerForTES(abc.ABC):
@@ -80,3 +85,23 @@ class AbstractFileServerForTES(abc.ABC):
     @abc.abstractmethod
     def kill_daemon(self) -> "bool":
         pass
+
+
+def _ImplementedFileServices(
+    the_module_name: "str" = __name__,
+    logger: "Optional[logging.Logger]" = None,
+) -> "Sequence[Type[AbstractFileServerForTES]]":
+    try:
+        the_module = importlib.import_module(the_module_name)
+        return implemented_classes_in_module(the_module, AbstractFileServerForTES, logger=logger)  # type: ignore[type-abstract]
+    except Exception as e:
+        if logger is None:
+            logger = logging.getLogger(__name__)
+        errmsg = f"Unable to import module {the_module_name} in order to gather implemented file services, due errors:"
+        logger.exception(errmsg)
+        raise Exception(errmsg) from e
+
+
+FILE_SERVER_CLASSES: "Sequence[Type[AbstractFileServerForTES]]" = (
+    _ImplementedFileServices()
+)

@@ -54,11 +54,14 @@ if TYPE_CHECKING:
         format: str
         level: int
 
+    from .file_server import (
+        AbstractFileServerForTES,
+    )
 
 import tes
 
 from .argparse_helper import _SubParsersGroupAction
-from .file_server.ftp_server_helper import FTPServerForTES
+from .file_server import FILE_SERVER_CLASSES
 from .subcommands import SUBCOMMAND_CLASSES
 
 LOGGING_FORMAT = "%(asctime)-15s - [%(levelname)s] %(message)s"
@@ -170,6 +173,18 @@ LOG_MAPPING = {
 
 
 DEFAULT_DEBUG_HOST: "Final[str]" = "http://localhost:8000"
+
+
+def select_input_file_service_implementation() -> "Type[AbstractFileServerForTES]":
+    # TO BE PROPERLY IMPLEMENTED
+    # We want to believe
+    return FILE_SERVER_CLASSES[0]
+
+
+def select_output_file_service_implementation() -> "Type[AbstractFileServerForTES]":
+    # TO BE PROPERLY IMPLEMENTED
+    # We want to believe
+    return FILE_SERVER_CLASSES[0]
 
 
 def main(
@@ -299,21 +314,25 @@ def main(
             else DEFAULT_DEBUG_HOST
         )
         # We want to believe
-        file_server = FTPServerForTES()
+        # TO BE IMPROVED
+        input_file_service_clazz = select_input_file_service_implementation()
+        output_file_service_clazz = select_output_file_service_implementation()
+        # TO BE IMPROVED
+        input_file_service = input_file_service_clazz()
+        output_file_service = output_file_service_clazz()
         tes_service_supports_dirs = True
         try:
             tes_client = tes.HTTPClient(host, timeout=5)
             service_info = tes_client.get_service_info()
-            tes_service_supports_dirs = (
-                service_info.id not in ("org.ga4gh.funnel",)
-            ) or not isinstance(file_server, FTPServerForTES)
+            tes_service_supports_dirs = service_info.id not in ("org.ga4gh.funnel",)
         except:
             return 125
 
         subcommand_instance = subcommand_router[args.command](
             docker_cmd,
             tes_client,
-            file_server,
+            input_file_service,
+            output_file_service,
             tes_service_supports_dirs=tes_service_supports_dirs,
         )
         return subcommand_instance.subcommand(args, unknown)

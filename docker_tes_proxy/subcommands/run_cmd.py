@@ -978,7 +978,8 @@ See 'docker run --help'."""
             cF = None
 
         # Parse the volumes
-        file_server: "Optional[AbstractFileServerForTES]" = None
+        input_file_service: "Optional[AbstractFileServerForTES]" = None
+        output_file_service: "Optional[AbstractFileServerForTES]" = None
         inputs: "List[tes.Input]" = []
         outputs: "List[tes.Output]" = []
 
@@ -1001,12 +1002,13 @@ See 'docker run --help'."""
                     "--tty or --attach stdin cannot be completely honoured with pipes as there is no STDIN streaming communication in GA4GH TES"
                 )
 
-        file_server = self.file_server
+        input_file_service = self.input_file_service
+        output_file_service = self.output_file_service
 
         stdin_input: "Optional[tes.Input]" = None
         # Add the stdin
         if tstdin:
-            the_uri = file_server.add_ro_volume(tstdin.name)
+            the_uri = input_file_service.add_ro_volume(tstdin.name)
             remote_path_t = "/" + os.path.basename(tstdin.name)
             stdin_input = tes.Input(
                 url=the_uri,
@@ -1152,9 +1154,12 @@ See 'docker run --help'."""
             is_ro = isinstance(flags_or_skip, str) and flags_or_skip.startswith("ro")
             remote_path_rw = remote_path
 
+            the_uri_output: "Optional[str]"
             if local_path_exists:
                 if os.path.isdir(local_path) and (
-                    not self.tes_service_supports_dirs or isinstance(flags_or_skip, set)
+                    not self.tes_service_supports_dirs_for_input
+                    or not self.tes_service_supports_dirs_for_output
+                    or isinstance(flags_or_skip, set)
                 ):
                     skip_names = (
                         flags_or_skip if isinstance(flags_or_skip, set) else set()
@@ -1189,9 +1194,15 @@ See 'docker run --help'."""
                     remote_path_rw = "/__rw__" + remote_path
 
                 if is_ro:
-                    the_uri = file_server.add_ro_volume(local_path)
+                    the_uri = input_file_service.add_ro_volume(local_path)
+                    the_uri_output = None
+                elif input_file_service != output_file_service:
+                    the_uri = input_file_service.add_ro_volume(local_path)
+                    the_uri_output = output_file_service.add_wo_volume(local_path)
                 else:
-                    the_uri = file_server.add_rw_volume(local_path)
+                    # Don't do twice!
+                    the_uri = input_file_service.add_rw_volume(local_path)
+                    the_uri_output = the_uri
             elif is_ro:
                 # This is not an error in docker, as it blindly creates
                 # an empty directory for it.
@@ -1202,7 +1213,7 @@ See 'docker run --help'."""
             else:
                 if not added_wo_volume:
                     task_volumes.append(wo_volume_name)
-                if not self.tes_service_supports_dirs:
+                if not self.tes_service_supports_dirs_for_output:
                     local_path_dir = local_path
                     remote_path_dir = remote_path
 
@@ -1220,7 +1231,8 @@ See 'docker run --help'."""
                     volume_packings.append((remote_path_dir, remote_path_rw, set()))
                     local_volume_extractions.append((local_path, local_path_dir))
 
-                the_uri = file_server.add_wo_volume(local_path)
+                the_uri = output_file_service.add_wo_volume(local_path)
+                the_uri_output = the_uri
 
             if local_path_exists:
                 inputs.append(
@@ -1231,9 +1243,10 @@ See 'docker run --help'."""
                     )
                 )
             if not is_ro:
+                assert the_uri_output is not None
                 outputs.append(
                     tes.Output(
-                        url=the_uri,
+                        url=the_uri_output,
                         path=remote_path_rw,
                         type=(
                             "FILE"
@@ -1244,13 +1257,23 @@ See 'docker run --help'."""
                 )
 
         # Keep the file server running only if it is needed
-        if len(inputs) > 0 or len(outputs) > 0:
+        if len(inputs) > 0:
             if self.logger.getEffectiveLevel() > logging.DEBUG:
-                file_server.daemonize()
+                input_file_service.daemonize()
             else:
-                file_server.daemonize("/tmp/ftp-log.txt")
+                input_file_service.daemonize("/tmp/input_file_service-log.txt")
         else:
-            file_server = None
+            input_file_service = None
+
+        if len(outputs) > 0:
+            # Perform "daemonization" once
+            if input_file_service != output_file_service:
+                if self.logger.getEffectiveLevel() > logging.DEBUG:
+                    output_file_service.daemonize()
+                else:
+                    output_file_service.daemonize("/tmp/output_file_service-log.txt")
+        else:
+            output_file_service = None
 
         task_resources: "Optional[tes.Resources]" = None
         cpu_count = 0
@@ -1454,8 +1477,8 @@ See 'docker run --help'."""
                 # is remotely updated because the volume was writable
                 tfH.extractall_skipping_unwritable(destpath)
 
-        if file_server is not None:
-            file_server.synchronize()
+        if output_file_service is not None:
+            output_file_service.synchronize()
 
         self.logger.debug(task_info)
         # j = json.loads(task_info.as_json())

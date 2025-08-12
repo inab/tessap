@@ -20,16 +20,11 @@ import abc
 import importlib
 import inspect
 import logging
-import pkgutil
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import argparse
-
-    from types import (
-        ModuleType,
-    )
 
     from typing import (
         Any,
@@ -50,13 +45,16 @@ if TYPE_CHECKING:
 
     from ..file_server import AbstractFileServerForTES
 
+from ..misc.common_discovery import implemented_classes_in_module
+
 
 class AbstractSubcommand(abc.ABC):
     def __init__(
         self,
         docker_cmd: "str",
         tes_client: "tes.HTTPClient",
-        file_server: "AbstractFileServerForTES",
+        input_file_service: "AbstractFileServerForTES",
+        output_file_service: "AbstractFileServerForTES",
         tes_service_supports_dirs: "bool" = True,
     ):
         self.logger = logging.getLogger(
@@ -66,9 +64,14 @@ class AbstractSubcommand(abc.ABC):
         )
 
         self.tes_cli = tes_client
-        self.file_server = file_server
-        self.tes_service_supports_dirs = (
-            tes_service_supports_dirs and file_server.supports_dirs
+        self.input_file_service = input_file_service
+        self.output_file_service = output_file_service
+        self.same_file_service = input_file_service == output_file_service
+        self.tes_service_supports_dirs_for_input = (
+            tes_service_supports_dirs and input_file_service.supports_dirs
+        )
+        self.tes_service_supports_dirs_for_output = (
+            tes_service_supports_dirs and output_file_service.supports_dirs
         )
 
     @classmethod
@@ -96,49 +99,13 @@ def _ImplementedSubcommands(
 ) -> "Sequence[Type[AbstractSubcommand]]":
     try:
         the_module = importlib.import_module(the_module_name)
-        return _ImplementedSubcommandsInModule(the_module, logger=logger)
+        return implemented_classes_in_module(the_module, AbstractSubcommand, logger=logger)  # type: ignore[type-abstract]
     except Exception as e:
         if logger is None:
             logger = logging.getLogger(__name__)
         errmsg = f"Unable to import module {the_module_name} in order to gather implemented subcommands, due errors:"
         logger.exception(errmsg)
         raise Exception(errmsg) from e
-
-
-def _iter_namespace(ns_pkg: "ModuleType") -> "Iterator[pkgutil.ModuleInfo]":
-    # Specifying the second argument (prefix) to iter_modules makes the
-    # returned name an absolute name instead of a relative one. This allows
-    # import_module to work without having to do additional modification to
-    # the name.
-    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
-
-
-def _ImplementedSubcommandsInModule(
-    the_module: "ModuleType",
-    logger: "Optional[logging.Logger]" = None,
-) -> "Sequence[Type[AbstractSubcommand]]":
-    subcommands: "MutableSequence[Type[AbstractSubcommand]]" = []
-
-    for finder, module_name, ispkg in _iter_namespace(the_module):
-        try:
-            named_module = importlib.import_module(module_name)
-        except:
-            if logger is None:
-                logger = logging.getLogger(__name__)
-            logger.exception(
-                f"Skipping module {module_name} in order to gather implemented subcommands, due errors:"
-            )
-            continue
-
-        for name, obj in inspect.getmembers(named_module):
-            if (
-                inspect.isclass(obj)
-                and not inspect.isabstract(obj)
-                and issubclass(obj, AbstractSubcommand)
-            ):
-                subcommands.append(obj)
-
-    return subcommands
 
 
 SUBCOMMAND_CLASSES: "Sequence[Type[AbstractSubcommand]]" = _ImplementedSubcommands()

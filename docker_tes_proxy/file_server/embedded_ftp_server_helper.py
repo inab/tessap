@@ -133,7 +133,7 @@ class DaemonRunningException(Exception):
     pass
 
 
-class FTPServerForTES(AbstractFileServerForTES):
+class EmbeddedFTPServerForTES(AbstractFileServerForTES):
     USER_RO = "user_ro"
     USER_RW = "user_rw"
     USER_WO = "user_wo"
