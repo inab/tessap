@@ -55,7 +55,12 @@ if TYPE_CHECKING:
         ProtoCmd,
     )
 
-from . import AbstractFileServerForTES
+from . import (
+    AbstractFileServerForTES,
+    DEFAULT_USER_RO,
+    DEFAULT_USER_RW,
+    DEFAULT_USER_WO,
+)
 
 # BEWARE!!!! This is needed because FTP client implementation
 # used by funnel (and funnel itself) forgets the kind of input file
@@ -134,9 +139,6 @@ class DaemonRunningException(Exception):
 
 
 class EmbeddedFTPServerForTES(AbstractFileServerForTES):
-    USER_RO = "user_ro"
-    USER_RW = "user_rw"
-    USER_WO = "user_wo"
 
     def __init__(
         self,
@@ -144,12 +146,24 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         public_port: "Optional[int]" = None,
         listen_ip: "str" = "::",
         listen_port: "int" = 2121,
+        user_ro: "str" = DEFAULT_USER_RO,
+        user_ro_pass: "Optional[str]" = None,
+        user_rw: "str" = DEFAULT_USER_RW,
+        user_rw_pass: "Optional[str]" = None,
+        user_wo: "str" = DEFAULT_USER_WO,
+        user_wo_pass: "Optional[str]" = None,
     ):
         super().__init__(
             public_name=public_name,
             public_port=public_port,
             listen_ip=listen_ip,
             listen_port=listen_port,
+            user_ro=user_ro,
+            user_ro_pass=user_ro_pass,
+            user_rw=user_rw,
+            user_rw_pass=user_rw_pass,
+            user_wo=user_wo,
+            user_wo_pass=user_wo_pass,
         )
 
         self.authorizer = DummyAuthorizer()
@@ -173,17 +187,17 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         self.wo_output_dir = pathlib.Path(self.wo_dir) / "output"
         self.wo_output_dir.mkdir()
 
-        self.user_ro_pass = str(uuid.uuid4())
-        self.user_rw_pass = str(uuid.uuid4())
-        self.user_wo_pass = str(uuid.uuid4())
+        self.user_ro_pass = str(uuid.uuid4()) if user_ro_pass is None else user_ro_pass
+        self.user_rw_pass = str(uuid.uuid4()) if user_rw_pass is None else user_rw_pass
+        self.user_wo_pass = str(uuid.uuid4()) if user_wo_pass is None else user_wo_pass
         self.authorizer.add_user(
-            self.USER_RO, self.user_ro_pass, self.ro_dir, perm="elr"
+            self.user_ro, self.user_ro_pass, self.ro_dir, perm="elr"
         )
         self.authorizer.add_user(
-            self.USER_RW, self.user_rw_pass, self.rw_dir, perm="elradfmwMT"
+            self.user_rw, self.user_rw_pass, self.rw_dir, perm="elradfmwMT"
         )
         self.authorizer.add_user(
-            self.USER_WO, self.user_wo_pass, self.wo_dir, perm="elradfmwMT"
+            self.user_wo, self.user_wo_pass, self.wo_dir, perm="elradfmwMT"
         )
 
         self.wo_mapping: "MutableMapping[str, pathlib.Path]" = dict()
@@ -210,10 +224,11 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         ftp_path = os.path.join(self.ro_input_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
 
+        assert self.user_ro_pass is not None
         return urllib.parse.urlunparse(
             (
                 "ftp",
-                urllib.parse.quote(self.USER_RO)
+                urllib.parse.quote(self.user_ro)
                 + ":"
                 + urllib.parse.quote(self.user_ro_pass)
                 + "@"
@@ -243,10 +258,11 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         ftp_path = os.path.join(self.rw_io_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
 
+        assert self.user_rw_pass is not None
         return urllib.parse.urlunparse(
             (
                 "ftp",
-                urllib.parse.quote(self.USER_RW)
+                urllib.parse.quote(self.user_rw)
                 + ":"
                 + urllib.parse.quote(self.user_rw_pass)
                 + "@"
@@ -270,10 +286,11 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         ftp_path = os.path.join(self.wo_output_dir, rand_name)
         self.wo_mapping[rand_name] = pathlib.Path(local_path).resolve()
 
+        assert self.user_wo_pass is not None
         return urllib.parse.urlunparse(
             (
                 "ftp",
-                urllib.parse.quote(self.USER_WO)
+                urllib.parse.quote(self.user_wo)
                 + ":"
                 + urllib.parse.quote(self.user_wo_pass)
                 + "@"

@@ -35,7 +35,16 @@ if TYPE_CHECKING:
         Union,
     )
 
+    from typing_extensions import (
+        Final,
+    )
+
 from ..misc.common_discovery import implemented_classes_in_module
+
+
+DEFAULT_USER_RO: "Final[str]" = "user_ro"
+DEFAULT_USER_RW: "Final[str]" = "user_rw"
+DEFAULT_USER_WO: "Final[str]" = "user_wo"
 
 
 class AbstractFileServerForTES(abc.ABC):
@@ -45,6 +54,12 @@ class AbstractFileServerForTES(abc.ABC):
         public_port: "Optional[int]" = None,
         listen_ip: "str" = "::",
         listen_port: "int" = 2121,
+        user_ro: "str" = DEFAULT_USER_RO,
+        user_ro_pass: "Optional[str]" = None,
+        user_rw: "str" = DEFAULT_USER_RW,
+        user_rw_pass: "Optional[str]" = None,
+        user_wo: "str" = DEFAULT_USER_WO,
+        user_wo_pass: "Optional[str]" = None,
     ):
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
@@ -56,6 +71,15 @@ class AbstractFileServerForTES(abc.ABC):
         self.listen_port = listen_port
         self.public_name = public_name
         self.public_port = listen_port if public_port is None else public_port
+
+        self.user_ro = user_ro
+        self.user_ro_pass = user_ro_pass
+
+        self.user_rw = user_rw
+        self.user_rw_pass = user_rw_pass
+
+        self.user_wo = user_wo
+        self.user_wo_pass = user_wo_pass
 
     @property
     @abc.abstractmethod
