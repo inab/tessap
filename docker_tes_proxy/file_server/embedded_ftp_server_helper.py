@@ -60,6 +60,9 @@ from . import (
     DEFAULT_USER_RO,
     DEFAULT_USER_RW,
     DEFAULT_USER_WO,
+    DEFAULT_RO_REL_DIR,
+    DEFAULT_RW_REL_DIR,
+    DEFAULT_WO_REL_DIR,
 )
 
 # BEWARE!!!! This is needed because FTP client implementation
@@ -152,6 +155,11 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         user_rw_pass: "Optional[str]" = None,
         user_wo: "str" = DEFAULT_USER_WO,
         user_wo_pass: "Optional[str]" = None,
+        ro_rel_dir: "str" = DEFAULT_RO_REL_DIR,
+        rw_rel_dir: "str" = DEFAULT_RW_REL_DIR,
+        wo_rel_dir: "str" = DEFAULT_WO_REL_DIR,
+        remote_path_prefix: "str" = "",
+        create_session_rel_dir: "bool" = True,
     ):
         super().__init__(
             public_name=public_name,
@@ -164,6 +172,11 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
             user_rw_pass=user_rw_pass,
             user_wo=user_wo,
             user_wo_pass=user_wo_pass,
+            ro_rel_dir=ro_rel_dir,
+            rw_rel_dir=rw_rel_dir,
+            wo_rel_dir=wo_rel_dir,
+            remote_path_prefix=remote_path_prefix,
+            create_session_rel_dir=create_session_rel_dir,
         )
 
         self.authorizer = DummyAuthorizer()
@@ -176,16 +189,16 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         # and read-write volumes
         self.ro_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpexport")
         atexit.register(shutil.rmtree, self.ro_dir, True)
-        self.ro_input_dir = pathlib.Path(self.ro_dir) / "input"
-        self.ro_input_dir.mkdir()
+        self.ro_input_dir = pathlib.Path(self.ro_dir) / self.ro_rel_dir
+        self.ro_input_dir.mkdir(parents=True, exist_ok=True)
         self.rw_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpei")
         atexit.register(shutil.rmtree, self.rw_dir, True)
-        self.rw_io_dir = pathlib.Path(self.rw_dir) / "io"
-        self.rw_io_dir.mkdir()
+        self.rw_io_dir = pathlib.Path(self.rw_dir) / self.rw_rel_dir
+        self.rw_io_dir.mkdir(parents=True, exist_ok=True)
         self.wo_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpimport")
         atexit.register(shutil.rmtree, self.wo_dir, True)
-        self.wo_output_dir = pathlib.Path(self.wo_dir) / "output"
-        self.wo_output_dir.mkdir()
+        self.wo_output_dir = pathlib.Path(self.wo_dir) / self.wo_rel_dir
+        self.wo_output_dir.mkdir(parents=True, exist_ok=True)
 
         self.user_ro_pass = str(uuid.uuid4()) if user_ro_pass is None else user_ro_pass
         self.user_rw_pass = str(uuid.uuid4()) if user_rw_pass is None else user_rw_pass

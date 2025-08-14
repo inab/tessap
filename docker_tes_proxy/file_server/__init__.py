@@ -20,6 +20,7 @@ import abc
 import importlib
 import inspect
 import logging
+import uuid
 
 from typing import (
     TYPE_CHECKING,
@@ -46,6 +47,10 @@ DEFAULT_USER_RO: "Final[str]" = "user_ro"
 DEFAULT_USER_RW: "Final[str]" = "user_rw"
 DEFAULT_USER_WO: "Final[str]" = "user_wo"
 
+DEFAULT_RO_REL_DIR: "Final[str]" = "input"
+DEFAULT_RW_REL_DIR: "Final[str]" = "io"
+DEFAULT_WO_REL_DIR: "Final[str]" = "output"
+
 
 class AbstractFileServerForTES(abc.ABC):
     def __init__(
@@ -60,6 +65,11 @@ class AbstractFileServerForTES(abc.ABC):
         user_rw_pass: "Optional[str]" = None,
         user_wo: "str" = DEFAULT_USER_WO,
         user_wo_pass: "Optional[str]" = None,
+        ro_rel_dir: "str" = DEFAULT_RO_REL_DIR,
+        rw_rel_dir: "str" = DEFAULT_RW_REL_DIR,
+        wo_rel_dir: "str" = DEFAULT_WO_REL_DIR,
+        remote_path_prefix: "str" = "",
+        create_session_rel_dir: "bool" = True,
     ):
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
@@ -80,6 +90,24 @@ class AbstractFileServerForTES(abc.ABC):
 
         self.user_wo = user_wo
         self.user_wo_pass = user_wo_pass
+
+        # Create a random session rel dir
+        if create_session_rel_dir:
+            if len(remote_path_prefix) > 0:
+                remote_path_prefix += "/"
+
+            remote_path_prefix += str(uuid.uuid4())
+
+        self.remote_path_prefix = remote_path_prefix
+
+        if len(self.remote_path_prefix) > 0:
+            self.ro_rel_dir = self.remote_path_prefix + "/" + ro_rel_dir
+            self.rw_rel_dir = self.remote_path_prefix + "/" + rw_rel_dir
+            self.wo_rel_dir = self.remote_path_prefix + "/" + wo_rel_dir
+        else:
+            self.ro_rel_dir = ro_rel_dir
+            self.rw_rel_dir = rw_rel_dir
+            self.wo_rel_dir = wo_rel_dir
 
     @property
     @abc.abstractmethod
