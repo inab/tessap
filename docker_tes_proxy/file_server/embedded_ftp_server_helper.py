@@ -160,7 +160,26 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         wo_rel_dir: "str" = DEFAULT_WO_REL_DIR,
         remote_path_prefix: "str" = "",
         create_session_rel_dir: "bool" = True,
+        # These parameters are going to be ignored
+        public_ro_user: "Optional[str]" = None,
+        public_ro_pass: "Optional[str]" = None,
+        public_rw_user: "Optional[str]" = None,
+        public_rw_pass: "Optional[str]" = None,
+        public_wo_user: "Optional[str]" = None,
+        public_wo_pass: "Optional[str]" = None,
+        public_remote_path_prefix: "Optional[str]" = None,
     ):
+        # This is needed
+        if user_ro_pass is None:
+            user_ro_pass = str(uuid.uuid4())
+
+        if user_rw_pass is None:
+            user_rw_pass = str(uuid.uuid4())
+
+        if user_wo_pass:
+            user_wo_pass = str(uuid.uuid4())
+
+        # Public ones are not provided
         super().__init__(
             public_name=public_name,
             public_port=public_port,
@@ -189,28 +208,28 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         # and read-write volumes
         self.ro_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpexport")
         atexit.register(shutil.rmtree, self.ro_dir, True)
-        self.ro_input_dir = pathlib.Path(self.ro_dir) / self.ro_rel_dir
+        self.ro_input_dir = pathlib.Path(self.ro_dir) / self.public_ro_rel_dir
         self.ro_input_dir.mkdir(parents=True, exist_ok=True)
         self.rw_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpei")
         atexit.register(shutil.rmtree, self.rw_dir, True)
-        self.rw_io_dir = pathlib.Path(self.rw_dir) / self.rw_rel_dir
+        self.rw_io_dir = pathlib.Path(self.rw_dir) / self.public_rw_rel_dir
         self.rw_io_dir.mkdir(parents=True, exist_ok=True)
         self.wo_dir = tempfile.mkdtemp(prefix="dtp", suffix="tmpimport")
         atexit.register(shutil.rmtree, self.wo_dir, True)
-        self.wo_output_dir = pathlib.Path(self.wo_dir) / self.wo_rel_dir
+        self.wo_output_dir = pathlib.Path(self.wo_dir) / self.public_wo_rel_dir
         self.wo_output_dir.mkdir(parents=True, exist_ok=True)
 
-        self.user_ro_pass = str(uuid.uuid4()) if user_ro_pass is None else user_ro_pass
-        self.user_rw_pass = str(uuid.uuid4()) if user_rw_pass is None else user_rw_pass
-        self.user_wo_pass = str(uuid.uuid4()) if user_wo_pass is None else user_wo_pass
+        assert self.public_ro_pass is not None
         self.authorizer.add_user(
-            self.user_ro, self.user_ro_pass, self.ro_dir, perm="elr"
+            self.public_ro_user, self.public_ro_pass, self.ro_dir, perm="elr"
         )
+        assert self.public_rw_pass is not None
         self.authorizer.add_user(
-            self.user_rw, self.user_rw_pass, self.rw_dir, perm="elradfmwMT"
+            self.public_rw_user, self.public_rw_pass, self.rw_dir, perm="elradfmwMT"
         )
+        assert self.public_wo_pass is not None
         self.authorizer.add_user(
-            self.user_wo, self.user_wo_pass, self.wo_dir, perm="elradfmwMT"
+            self.public_wo_user, self.public_wo_pass, self.wo_dir, perm="elradfmwMT"
         )
 
         self.wo_mapping: "MutableMapping[str, pathlib.Path]" = dict()
@@ -237,13 +256,13 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         ftp_path = os.path.join(self.ro_input_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
 
-        assert self.user_ro_pass is not None
+        assert self.public_ro_pass is not None
         return urllib.parse.urlunparse(
             (
                 "ftp",
-                urllib.parse.quote(self.user_ro)
+                urllib.parse.quote(self.public_ro_user)
                 + ":"
-                + urllib.parse.quote(self.user_ro_pass)
+                + urllib.parse.quote(self.public_ro_pass)
                 + "@"
                 + self.public_name
                 + ":"
@@ -271,13 +290,13 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         ftp_path = os.path.join(self.rw_io_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
 
-        assert self.user_rw_pass is not None
+        assert self.public_rw_pass is not None
         return urllib.parse.urlunparse(
             (
                 "ftp",
-                urllib.parse.quote(self.user_rw)
+                urllib.parse.quote(self.public_rw_user)
                 + ":"
-                + urllib.parse.quote(self.user_rw_pass)
+                + urllib.parse.quote(self.public_rw_pass)
                 + "@"
                 + self.public_name
                 + ":"
@@ -299,13 +318,13 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         ftp_path = os.path.join(self.wo_output_dir, rand_name)
         self.wo_mapping[rand_name] = pathlib.Path(local_path).resolve()
 
-        assert self.user_wo_pass is not None
+        assert self.public_wo_pass is not None
         return urllib.parse.urlunparse(
             (
                 "ftp",
-                urllib.parse.quote(self.user_wo)
+                urllib.parse.quote(self.public_wo_user)
                 + ":"
-                + urllib.parse.quote(self.user_wo_pass)
+                + urllib.parse.quote(self.public_wo_pass)
                 + "@"
                 + self.public_name
                 + ":"

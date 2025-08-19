@@ -70,6 +70,13 @@ class AbstractFileServerForTES(abc.ABC):
         wo_rel_dir: "str" = DEFAULT_WO_REL_DIR,
         remote_path_prefix: "str" = "",
         create_session_rel_dir: "bool" = True,
+        public_ro_user: "Optional[str]" = None,
+        public_ro_pass: "Optional[str]" = None,
+        public_rw_user: "Optional[str]" = None,
+        public_rw_pass: "Optional[str]" = None,
+        public_wo_user: "Optional[str]" = None,
+        public_wo_pass: "Optional[str]" = None,
+        public_remote_path_prefix: "Optional[str]" = None,
     ):
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
@@ -91,14 +98,44 @@ class AbstractFileServerForTES(abc.ABC):
         self.user_wo = user_wo
         self.user_wo_pass = user_wo_pass
 
+        if public_ro_user is None:
+            self.public_ro_user = self.user_ro
+            self.public_ro_pass = self.user_ro_pass
+        else:
+            self.public_ro_user = public_ro_user
+            self.public_ro_pass = public_ro_pass
+
+        if public_rw_user is None:
+            self.public_rw_user = self.user_rw
+            self.public_rw_pass = self.user_rw_pass
+        else:
+            self.public_rw_user = public_rw_user
+            self.public_rw_pass = public_rw_pass
+
+        if public_wo_user is None:
+            self.public_wo_user = self.user_wo
+            self.public_wo_pass = self.user_wo_pass
+        else:
+            self.public_wo_user = public_wo_user
+            self.public_wo_pass = public_wo_pass
+
+        if public_remote_path_prefix is None:
+            public_remote_path_prefix = remote_path_prefix
+
         # Create a random session rel dir
         if create_session_rel_dir:
             if len(remote_path_prefix) > 0:
                 remote_path_prefix += "/"
+            if len(public_remote_path_prefix) > 0:
+                public_remote_path_prefix += "/"
 
-            remote_path_prefix += str(uuid.uuid4())
+            rand_sess_dir = str(uuid.uuid4())
+
+            remote_path_prefix += rand_sess_dir
+            public_remote_path_prefix += rand_sess_dir
 
         self.remote_path_prefix = remote_path_prefix
+        self.public_remote_path_prefix = public_remote_path_prefix
 
         if len(self.remote_path_prefix) > 0:
             self.ro_rel_dir = self.remote_path_prefix + "/" + ro_rel_dir
@@ -108,6 +145,15 @@ class AbstractFileServerForTES(abc.ABC):
             self.ro_rel_dir = ro_rel_dir
             self.rw_rel_dir = rw_rel_dir
             self.wo_rel_dir = wo_rel_dir
+
+        if len(self.public_remote_path_prefix) > 0:
+            self.public_ro_rel_dir = self.public_remote_path_prefix + "/" + ro_rel_dir
+            self.public_rw_rel_dir = self.public_remote_path_prefix + "/" + rw_rel_dir
+            self.public_wo_rel_dir = self.public_remote_path_prefix + "/" + wo_rel_dir
+        else:
+            self.public_ro_rel_dir = ro_rel_dir
+            self.public_rw_rel_dir = rw_rel_dir
+            self.public_wo_rel_dir = wo_rel_dir
 
     @property
     @abc.abstractmethod
