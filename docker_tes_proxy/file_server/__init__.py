@@ -28,8 +28,10 @@ from typing import (
 
 if TYPE_CHECKING:
     import os
+    import pathlib
 
     from typing import (
+        MutableMapping,
         Optional,
         Sequence,
         Type,
@@ -154,6 +156,11 @@ class AbstractFileServerForTES(abc.ABC):
             self.public_ro_rel_dir = ro_rel_dir
             self.public_rw_rel_dir = rw_rel_dir
             self.public_wo_rel_dir = wo_rel_dir
+
+        # Last, but not the least important, the mappings to fetch back contents
+        # It is transport dependant, as some use the URL and others
+        # use some unique key value
+        self.w_mapping: "MutableMapping[str, pathlib.Path]" = dict()
 
     @property
     @abc.abstractmethod

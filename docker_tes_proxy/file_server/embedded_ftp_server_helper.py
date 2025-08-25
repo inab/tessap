@@ -232,8 +232,6 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
             self.public_wo_user, self.public_wo_pass, self.wo_dir, perm="elradfmwMT"
         )
 
-        self.wo_mapping: "MutableMapping[str, pathlib.Path]" = dict()
-
         self.daemon_pid: "Optional[int]" = None
 
     @property
@@ -289,6 +287,8 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         rand_name = prefix + str(uuid.uuid4())
         ftp_path = os.path.join(self.rw_io_dir, rand_name)
         os.symlink(os.path.realpath(local_path), ftp_path)
+        # As it is a local server, the path does not have to be
+        # registered on w_mapping
 
         assert self.public_rw_pass is not None
         return urllib.parse.urlunparse(
@@ -316,7 +316,7 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
 
         rand_name = str(uuid.uuid4())
         ftp_path = os.path.join(self.wo_output_dir, rand_name)
-        self.wo_mapping[rand_name] = pathlib.Path(local_path).resolve()
+        self.w_mapping[rand_name] = pathlib.Path(local_path).resolve()
 
         assert self.public_wo_pass is not None
         return urllib.parse.urlunparse(
@@ -343,7 +343,7 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
                 f"FTP daemon is not running. Changes could have been removed"
             )
 
-        for rand_name, local_path in self.wo_mapping.items():
+        for rand_name, local_path in self.w_mapping.items():
             ftp_path = self.wo_output_dir / rand_name
 
             if ftp_path.exists():
@@ -354,7 +354,7 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
                 )
 
         # Last, clear it!
-        self.wo_mapping = dict()
+        self.w_mapping = dict()
 
     def daemonize(self, log_file: "str" = "/dev/null") -> "bool":
         """Based on https://github.com/giampaolo/pyftpdlib/blob/29ad496d9a4f2bc3944fe2adbe0064a8fe702df4/demo/unix_daemon.py"""
