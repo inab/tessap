@@ -45,16 +45,17 @@ if TYPE_CHECKING:
 from ..misc.common_discovery import implemented_classes_in_module
 
 
-DEFAULT_USER_RO: "Final[str]" = "user_ro"
-DEFAULT_USER_RW: "Final[str]" = "user_rw"
-DEFAULT_USER_WO: "Final[str]" = "user_wo"
-
-DEFAULT_RO_REL_DIR: "Final[str]" = "input"
-DEFAULT_RW_REL_DIR: "Final[str]" = "io"
-DEFAULT_WO_REL_DIR: "Final[str]" = "output"
-
-
 class AbstractFileServerForTES(abc.ABC):
+    DEFAULT_USER_RO: "Final[str]" = "user_ro"
+    DEFAULT_USER_RW: "Final[str]" = "user_rw"
+    DEFAULT_USER_WO: "Final[str]" = "user_wo"
+
+    DEFAULT_RO_REL_DIR: "Final[str]" = "input"
+    DEFAULT_RW_REL_DIR: "Final[str]" = "io"
+    DEFAULT_WO_REL_DIR: "Final[str]" = "output"
+
+    DEFAULT_MAX_RETRIES: "Final[int]" = 5
+
     def __init__(
         self,
         public_name: "str" = "localhost",
@@ -79,6 +80,8 @@ class AbstractFileServerForTES(abc.ABC):
         public_wo_user: "Optional[str]" = None,
         public_wo_pass: "Optional[str]" = None,
         public_remote_path_prefix: "Optional[str]" = None,
+        remote_retries: "int" = DEFAULT_MAX_RETRIES,
+        public_remote_retries: "int" = DEFAULT_MAX_RETRIES,
     ):
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
@@ -156,6 +159,9 @@ class AbstractFileServerForTES(abc.ABC):
             self.public_ro_rel_dir = ro_rel_dir
             self.public_rw_rel_dir = rw_rel_dir
             self.public_wo_rel_dir = wo_rel_dir
+
+        self.remote_retries = remote_retries
+        self.public_remote_retries = public_remote_retries
 
         # Last, but not the least important, the mappings to fetch back contents
         # It is transport dependant, as some use the URL and others

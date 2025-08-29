@@ -57,12 +57,6 @@ if TYPE_CHECKING:
 
 from . import (
     AbstractFileServerForTES,
-    DEFAULT_USER_RO,
-    DEFAULT_USER_RW,
-    DEFAULT_USER_WO,
-    DEFAULT_RO_REL_DIR,
-    DEFAULT_RW_REL_DIR,
-    DEFAULT_WO_REL_DIR,
 )
 
 # BEWARE!!!! This is needed because FTP client implementation
@@ -149,15 +143,15 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         public_port: "Optional[int]" = None,
         listen_ip: "str" = "::",
         listen_port: "int" = 2121,
-        user_ro: "str" = DEFAULT_USER_RO,
+        user_ro: "str" = AbstractFileServerForTES.DEFAULT_USER_RO,
         user_ro_pass: "Optional[str]" = None,
-        user_rw: "str" = DEFAULT_USER_RW,
+        user_rw: "str" = AbstractFileServerForTES.DEFAULT_USER_RW,
         user_rw_pass: "Optional[str]" = None,
-        user_wo: "str" = DEFAULT_USER_WO,
+        user_wo: "str" = AbstractFileServerForTES.DEFAULT_USER_WO,
         user_wo_pass: "Optional[str]" = None,
-        ro_rel_dir: "str" = DEFAULT_RO_REL_DIR,
-        rw_rel_dir: "str" = DEFAULT_RW_REL_DIR,
-        wo_rel_dir: "str" = DEFAULT_WO_REL_DIR,
+        ro_rel_dir: "str" = AbstractFileServerForTES.DEFAULT_RO_REL_DIR,
+        rw_rel_dir: "str" = AbstractFileServerForTES.DEFAULT_RW_REL_DIR,
+        wo_rel_dir: "str" = AbstractFileServerForTES.DEFAULT_WO_REL_DIR,
         remote_path_prefix: "str" = "",
         create_session_rel_dir: "bool" = True,
         # These parameters are going to be ignored
@@ -168,6 +162,8 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
         public_wo_user: "Optional[str]" = None,
         public_wo_pass: "Optional[str]" = None,
         public_remote_path_prefix: "Optional[str]" = None,
+        remote_retries: "int" = AbstractFileServerForTES.DEFAULT_MAX_RETRIES,
+        public_remote_retries: "int" = AbstractFileServerForTES.DEFAULT_MAX_RETRIES,
     ):
         # This is needed
         if user_ro_pass is None:
@@ -196,6 +192,8 @@ class EmbeddedFTPServerForTES(AbstractFileServerForTES):
             wo_rel_dir=wo_rel_dir,
             remote_path_prefix=remote_path_prefix,
             create_session_rel_dir=create_session_rel_dir,
+            remote_retries=remote_retries,
+            public_remote_retries=public_remote_retries,
         )
 
         self.authorizer = DummyAuthorizer()
